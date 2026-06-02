@@ -11,10 +11,15 @@ export function DonePhase({
   deployRecord,
   agentId,
   onReset,
+  onAttachVoice,
 }: {
   deployRecord: BlueprintDeployRecord | null;
   agentId: string;
   onReset: () => void;
+  /** Optional — when present, renders the "Add a phone number" action.
+   *  Wired only when the deploy completed cleanly; partial / failed
+   *  states get only the reset button to keep the failure visible. */
+  onAttachVoice?: () => void;
 }) {
   const status = deployRecord?.status ?? "complete";
   const failedSteps = deployRecord?.failedSteps ?? [];
@@ -45,12 +50,22 @@ export function DonePhase({
           ))}
         </div>
       )}
-      <button
-        onClick={onReset}
-        className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-gray-300 hover:bg-white/5"
-      >
-        Deploy another
-      </button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {onAttachVoice && (
+          <button
+            onClick={onAttachVoice}
+            className="rounded-xl bg-violet-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-violet-500/30 hover:bg-violet-400"
+          >
+            Add a phone number
+          </button>
+        )}
+        <button
+          onClick={onReset}
+          className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-gray-300 hover:bg-white/5"
+        >
+          Deploy another
+        </button>
+      </div>
     </div>
   );
 }

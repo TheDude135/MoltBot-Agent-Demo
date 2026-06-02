@@ -6,12 +6,16 @@
 // and keeps cognitive overhead low while reading the control flow.
 //
 // Phases:
-//   1. catalog    — load blueprints + deployments in parallel, then pick one
-//   2. url        — Wix site URL → /api/introspect → overlay variables
-//   3. configure  — target deployment + new agent name/emoji + variables
-//   4. provisioning — POST /api/provision (server orchestrates create + deploy)
-//   5. progress   — poll /api/progress until terminal
-//   6. done | error — terminal outcomes
+//   1. catalog          — load blueprints + deployments in parallel, then pick one
+//   2. url              — Wix site URL → /api/introspect → overlay variables
+//   3. configure        — target deployment + new agent name/emoji + variables
+//   4. provisioning     — POST /api/provision (server orchestrates create + deploy)
+//   5. progress         — poll /api/progress until terminal
+//   6. done             — deploy success; offer optional voice attach
+//   7. pick-voice       — list voice deployments via /api/voice-deployments
+//   8. installing-voice — POST /api/install-voice, poll /api/voice-operation
+//   9. voice-done       — phone is live on the sub-agent
+//      error            — terminal failure (any stage)
 //
 // No API key, no Firestore credential, no SDK in the browser bundle —
 // the demo's own Next.js API routes are the only thing this page talks
@@ -23,6 +27,8 @@ import type {
   BlueprintDeployRecord,
   Deployment,
   DeployStatus,
+  VoiceDeployment,
+  VoiceOperation,
 } from "@/lib/types";
 import { generateAgentId, generateRequestId, isValidAgentId } from "@/lib/ids";
 import { CatalogPhase } from "@/components/CatalogPhase";
@@ -30,9 +36,21 @@ import { UrlPhase } from "@/components/UrlPhase";
 import { ConfigurePhase } from "@/components/ConfigurePhase";
 import { ProgressPhase } from "@/components/ProgressPhase";
 import { DonePhase, ErrorPhase } from "@/components/DonePhase";
+import { PickVoiceDeploymentPhase } from "@/components/PickVoiceDeploymentPhase";
+import { InstallVoicePhase, VoiceDonePhase } from "@/components/InstallVoicePhase";
 import { CenteredStatus } from "@/components/atoms";
 
-type Phase = "catalog" | "url" | "configure" | "provisioning" | "progress" | "done" | "error";
+type Phase =
+  | "catalog"
+  | "url"
+  | "configure"
+  | "provisioning"
+  | "progress"
+  | "done"
+  | "pick-voice"
+  | "installing-voice"
+  | "voice-done"
+  | "error";
 
 interface IntrospectResponse {
   canonicalUrl: string;
@@ -89,6 +107,18 @@ export default function Page() {
     agentId: string;
   } | null>(null);
   const [deployRecord, setDeployRecord] = useState<BlueprintDeployRecord | null>(null);
+
+  // Voice install state — populated only after the blueprint deploy
+  // succeeds and the user opts in to attach a phone.
+  const [voiceDeployments, setVoiceDeployments] = useState<VoiceDeployment[]>([]);
+  const [voiceListLoading, setVoiceListLoading] = useState(false);
+  const [voiceListError, setVoiceListError] = useState<string | null>(null);
+  const [selectedVoiceDeploymentId, setSelectedVoiceDeploymentId] = useState("");
+  const [voiceInstallContext, setVoiceInstallContext] = useState<{
+    opId: string;
+    phoneNumber: string | null;
+  } | null>(null);
+  const [voiceOperation, setVoiceOperation] = useState<VoiceOperation | null>(null);
 
   // Load catalog on mount
   useEffect(() => {
@@ -315,7 +345,126 @@ export default function Page() {
     setProvisionError(null);
     setProvisionContext(null);
     setDeployRecord(null);
+    // Reset voice state too — a fresh deploy flow shouldn't inherit
+    // the previous attempt's voice selection.
+    setVoiceDeployments([]);
+    setVoiceListError(null);
+    setSelectedVoiceDeploymentId("");
+    setVoiceInstallContext(null);
+    setVoiceOperation(null);
   };
+
+  // ── Voice install flow ─────────────────────────────────────────────
+
+  // Triggered from DonePhase via the "Add a phone number" button.
+  // Loads the customer's voice deployments lazily — most demo runs don't
+  // attach voice, so this avoids the round-trip up front.
+  const handleAttachVoice = useCallback(async () => {
+    setPhase("pick-voice");
+    setVoiceListError(null);
+    setVoiceListLoading(true);
+    try {
+      const res = await fetch("/api/voice-deployments", { cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (body as { error?: string }).error ??
+            `Could not load voice deployments (HTTP ${res.status}).`,
+        );
+      }
+      setVoiceDeployments((body as { deployments: VoiceDeployment[] }).deployments);
+    } catch (err) {
+      setVoiceListError((err as Error).message);
+    } finally {
+      setVoiceListLoading(false);
+    }
+  }, []);
+
+  // Submit /api/install-voice and store the op id we'll poll for.
+  const submitInstallVoice = useCallback(async () => {
+    if (!provisionContext || !selectedVoiceDeploymentId) return;
+    const requestId = generateRequestId();
+    setVoiceOperation(null);
+    setVoiceInstallContext(null);
+    setProvisionError(null);
+    setPhase("installing-voice");
+
+    try {
+      const res = await fetch("/api/install-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fleetDeploymentId: provisionContext.deploymentId,
+          agentId: provisionContext.agentId,
+          voiceDeploymentId: selectedVoiceDeploymentId,
+          forceReinstall: true,
+          requestId,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (body as { error?: string }).error ??
+            `Install dispatch failed (HTTP ${res.status}).`,
+        );
+      }
+      const { opId, phoneNumber } = body as {
+        opId: string;
+        phoneNumber: string | null;
+      };
+      setVoiceInstallContext({ opId, phoneNumber });
+    } catch (err) {
+      setProvisionError((err as Error).message);
+      setPhase("error");
+    }
+  }, [provisionContext, selectedVoiceDeploymentId]);
+
+  // Poll the voice install operation until terminal. Same pattern as the
+  // blueprint-deploy progress polling above.
+  const voicePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (phase !== "installing-voice" || !voiceInstallContext) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(
+          `/api/voice-operation/${voiceInstallContext.opId}`,
+          { cache: "no-store" },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            (body as { error?: string }).error ?? `HTTP ${res.status}`,
+          );
+        }
+        if (cancelled) return;
+        const op = (body as { operation: VoiceOperation }).operation;
+        setVoiceOperation(op);
+        if (op.status === "succeeded") {
+          if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+          setPhase("voice-done");
+        } else if (op.status === "failed") {
+          if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+          setProvisionError(
+            op.error?.message ?? "Voice install failed without a message.",
+          );
+          setPhase("error");
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setProvisionError((err as Error).message);
+        if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+        setPhase("error");
+      }
+    };
+    tick();
+    voicePollingRef.current = setInterval(tick, PROGRESS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+      voicePollingRef.current = null;
+    };
+  }, [phase, voiceInstallContext]);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -396,6 +545,40 @@ export default function Page() {
       {phase === "done" && (
         <DonePhase
           deployRecord={deployRecord}
+          agentId={provisionContext?.agentId ?? "(unknown)"}
+          onReset={reset}
+          onAttachVoice={
+            deployRecord?.status === "complete" ? handleAttachVoice : undefined
+          }
+        />
+      )}
+
+      {phase === "pick-voice" && (
+        <PickVoiceDeploymentPhase
+          voiceDeployments={voiceDeployments}
+          loading={voiceListLoading}
+          error={voiceListError}
+          agentId={provisionContext?.agentId ?? "(unknown)"}
+          selectedVoiceDeploymentId={selectedVoiceDeploymentId}
+          onChangeSelected={setSelectedVoiceDeploymentId}
+          onBack={() => setPhase("done")}
+          onSubmit={submitInstallVoice}
+          onSkip={() => setPhase("done")}
+          canSubmit={Boolean(selectedVoiceDeploymentId)}
+        />
+      )}
+
+      {phase === "installing-voice" && (
+        <InstallVoicePhase
+          phoneNumber={voiceInstallContext?.phoneNumber ?? null}
+          agentId={provisionContext?.agentId ?? "(unknown)"}
+          operation={voiceOperation}
+        />
+      )}
+
+      {phase === "voice-done" && (
+        <VoiceDonePhase
+          phoneNumber={voiceInstallContext?.phoneNumber ?? null}
           agentId={provisionContext?.agentId ?? "(unknown)"}
           onReset={reset}
         />

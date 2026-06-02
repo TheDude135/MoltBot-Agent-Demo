@@ -10,6 +10,7 @@ import type {
   Blueprint,
   BlueprintDeployRecord,
   Deployment,
+  InstallBundle,
   Operation,
 } from "./types";
 
@@ -280,4 +281,120 @@ export async function getBlueprintDeploy(
     `/v1/deployments/${encodeURIComponent(deploymentId)}/blueprint-deploys/${encodeURIComponent(requestId)}`,
   );
   return envelope.data.deploy;
+}
+
+// ─── Voice install dispatch (async; returns opId via Location) ───────
+
+export interface InstallVoiceInput {
+  fleetDeploymentId: string;
+  agentId: string;
+  installBundle: InstallBundle;
+  forceReinstall?: boolean;
+  /** Deterministic per logical install attempt. The body's `installBundle.token`
+   *  is single-use; once the bundle expires (15 min) a fresh mint is required. */
+  idempotencyKey: string;
+}
+
+export async function installVoice(input: InstallVoiceInput): Promise<{ opId: string }> {
+  const { response } = await callApi<unknown>(
+    `/v1/deployments/${encodeURIComponent(input.fleetDeploymentId)}/agents/${encodeURIComponent(input.agentId)}/voice-installs`,
+    {
+      method: "POST",
+      idempotencyKey: input.idempotencyKey,
+      body: JSON.stringify({
+        installBundle: input.installBundle,
+        forceReinstall: input.forceReinstall === true,
+      }),
+    },
+  );
+  if (response.status !== 202) {
+    throw new MbnApiError(
+      response.status,
+      "unexpected-status",
+      `Expected 202 Accepted on voice install; got ${response.status}`,
+    );
+  }
+  const location = response.headers.get("Location");
+  if (!location) {
+    throw new MbnApiError(
+      502,
+      "missing-location",
+      "API did not return a Location header for the install operation",
+    );
+  }
+  const opId = location.split("/").pop();
+  if (!opId) {
+    throw new MbnApiError(
+      502,
+      "invalid-location",
+      `Location header has no opId: ${location}`,
+    );
+  }
+  return { opId };
+}
+
+export interface UninstallVoiceInput {
+  fleetDeploymentId: string;
+  agentId: string;
+  installId: string;
+  idempotencyKey: string;
+}
+
+export async function uninstallVoice(input: UninstallVoiceInput): Promise<{ opId: string }> {
+  const { response } = await callApi<unknown>(
+    `/v1/deployments/${encodeURIComponent(input.fleetDeploymentId)}/agents/${encodeURIComponent(input.agentId)}/voice-installs/${encodeURIComponent(input.installId)}`,
+    {
+      method: "DELETE",
+      idempotencyKey: input.idempotencyKey,
+    },
+  );
+  if (response.status !== 202) {
+    throw new MbnApiError(
+      response.status,
+      "unexpected-status",
+      `Expected 202 Accepted on voice uninstall; got ${response.status}`,
+    );
+  }
+  const location = response.headers.get("Location");
+  if (!location) {
+    throw new MbnApiError(
+      502,
+      "missing-location",
+      "API did not return a Location header for the uninstall operation",
+    );
+  }
+  const opId = location.split("/").pop();
+  if (!opId) {
+    throw new MbnApiError(
+      502,
+      "invalid-location",
+      `Location header has no opId: ${location}`,
+    );
+  }
+  return { opId };
+}
+
+// ─── Agent detail (for back-pointer surface after install completes) ─
+
+import type { AgentVoiceBackPointer } from "./types";
+
+export interface AgentRecord {
+  agentId: string;
+  name: string;
+  emoji: string;
+  status: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  telegramUsername: string | null;
+  voice: AgentVoiceBackPointer | null;
+}
+
+export async function getAgent(
+  deploymentId: string,
+  agentId: string,
+): Promise<AgentRecord> {
+  const { envelope } = await callApi<RequestEnvelope<{ agent: AgentRecord }>>(
+    `/v1/deployments/${encodeURIComponent(deploymentId)}/agents/${encodeURIComponent(agentId)}`,
+  );
+  return envelope.data.agent;
 }

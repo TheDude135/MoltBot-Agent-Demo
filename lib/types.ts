@@ -83,3 +83,42 @@ export interface BlueprintDeployRecord {
   agentId: string;
   deploymentId: string;
 }
+
+// ─── Voice install bundle types (TTMA voice-api) ─────────────────────────
+
+/** A voice deployment owned by the customer — Telnyx phone + TTMA voice gateway. */
+export interface VoiceDeployment {
+  id: string;
+  phoneNumber: string | null;
+  lifecycleStatus: string | null;
+  agentId: string | null;
+  createdAt: string | null;
+}
+
+/**
+ * The opaque bundle returned by TTMA `/v1/voice-deployments/:id/install-bundles`.
+ * Forwarded verbatim to Ninja `/v1/.../voice-installs`. The token is one-time
+ * use with a 15-minute TTL; do not cache.
+ */
+export interface InstallBundle {
+  token: string;
+  voiceDeploymentId: string;
+  agentId: string;
+  phoneNumber: string;
+  expiresAt: string;
+  redeemEndpoint?: string;
+  requestedVersion?: string | null;
+}
+
+/** Public projection of `apiOperations` for voice.install / voice.uninstall. */
+export interface VoiceOperation extends Operation {
+  kind: "voice.install" | "voice.uninstall";
+}
+
+/** Per-agent voice back-pointer surfaced by GET /v1/.../agents/:agentId. */
+export interface AgentVoiceBackPointer {
+  voiceDeploymentId: string;
+  phoneNumber: string | null;
+  installedAt: string | null;
+  installId: string;
+}
