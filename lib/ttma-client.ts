@@ -1,11 +1,12 @@
 // Server-only HTTP wrapper around the TTMA voice-api at
-// `api.talktomyagent.io`. Mirrors the patterns in `mbn-client.ts`: same
-// Bearer key, same RFC-7807 error parsing, same `Idempotency-Key`
-// requirement on non-GET requests.
+// `api.talktomyagent.io`. Mirrors the patterns in `mbn-client.ts`:
+// Bearer auth, RFC-7807 error parsing, `Idempotency-Key` on non-GET.
 //
-// The same `mbn_live_*` key is accepted by both APIs — both Cloud
-// Functions read from the same `apiKeys` Firestore collection — but the
-// key must carry the voice-specific scopes (see lib/config.ts comments).
+// Siloed key model: this client uses the TTMA-silo key (`ttmaApiKey` from
+// lib/config.ts — TTMA_API_KEY, with a legacy MBN_API_KEY fallback). The
+// key must carry the TTMA voice scopes (voice:read, voice:apps,
+// voice:install-bundles) and be scoped to the target voice deployment.
+// The Ninja key never reaches this client, and vice-versa.
 
 import "server-only";
 import { getConfig } from "./config";
@@ -36,7 +37,14 @@ async function callTtma<T>(
   pathAndQuery: string,
   init: RequestInit & { timeoutMs?: number; idempotencyKey?: string } = {},
 ): Promise<{ envelope: T; response: Response }> {
-  const { ttmaApiBase, apiKey } = getConfig();
+  const { ttmaApiBase, ttmaApiKey } = getConfig();
+  if (!ttmaApiKey) {
+    throw new TtmaApiError(
+      500,
+      "ttma-key-missing",
+      "TTMA_API_KEY (or legacy MBN_API_KEY) is not set — the voice + Wix flow needs a TTMA-scoped key.",
+    );
+  }
   const url = new URL(pathAndQuery, ttmaApiBase).toString();
   const timeoutMs = init.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -54,7 +62,7 @@ async function callTtma<T>(
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${ttmaApiKey}`,
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...(needsIdempotencyKey && init.idempotencyKey
           ? { "Idempotency-Key": init.idempotencyKey }

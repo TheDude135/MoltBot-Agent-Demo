@@ -39,29 +39,35 @@ The reference customer flow guide for the underlying voice install bundle protoc
 
 ## Prerequisites
 
-You need **a MoltBot Ninja API key** with these scopes:
+The Ninja API and the TTMA Voice API are **separate, siloed services**, so
+the demo uses **two keys** — one per silo — and never lets a credential
+cross APIs. Mint each in its own dashboard.
 
-**Required for blueprint deploy (phases 1-7):**
+**`NINJA_API_KEY`** — mint at `https://app.moltbot.ninja` → API Keys → Create.
+Scope it to the **fleet deployment** you deploy onto. Scopes:
 
 - `deployments:read`
 - `agents:write`
 - `blueprints:read`
 - `blueprints:deploy`
+- `voice:install` *(optional — dispatch the gateway onto the agent)*
+- `voice:uninstall` *(optional — DELETE flow; no UI yet)*
 
-**Optional for voice + Wix app install:**
+**`TTMA_API_KEY`** — mint in the **TTMA portal** → API Keys. Scope it to the
+**voice deployment** you install from. Only needed for the voice + Wix flow:
 
 - `voice:read` — list voice deployments
-- `voice:apps` — install the Wix Bookings app on the voice deployment
-- `voice:install-bundles` — mint install bundles at TTMA
-- `voice:install` — dispatch install at Ninja
-- `voice:uninstall` — DELETE flow (the demo doesn't ship a UI for this yet)
+- `voice:apps` — install the Wix Bookings app
+- `voice:install-bundles` — mint install bundles
 
-Mint one at `https://app.moltbot.ninja` → API Keys → Create. The key MUST be scoped to:
+Per-instance scope is enforced on both APIs: the key only works on the
+deployments you select, and the API blocks cross-deployment use even with
+valid scopes.
 
-- The Ninja **fleet deployment** you want to deploy onto, AND
-- The TTMA **voice deployment(s)** you want to install voice from (per-instance scope is enforced on both APIs)
-
-The API blocks cross-deployment use even with valid scopes.
+> **Legacy single-key fallback:** if you leave the two vars unset, both
+> silos fall back to a single `MBN_API_KEY` — but that only works if the
+> key carries *both* silos' scopes (a cross-API key). The two-key model is
+> preferred.
 
 You also need the API itself deployed and reachable. Verify with:
 
@@ -79,7 +85,7 @@ The output must list `/v1/blueprints` and `/v1/blueprints/{blueprintId}`. If it 
 cd MoltBot-Agent-Demo
 npm install
 cp .env.example .env.local
-# Edit .env.local and paste your real key.
+# Edit .env.local: paste NINJA_API_KEY (and TTMA_API_KEY for the voice flow).
 npm run dev
 ```
 
@@ -118,7 +124,7 @@ Next.js (port 3030)
         api.moltbot.ninja   +   api.talktomyagent.io
 ```
 
-The API key lives in `MBN_API_KEY` (server env). The TTMA + Ninja Cloud Functions read from the same `apiKeys` Firestore collection — one key, two services. All MBN calls go through `lib/mbn-client.ts`; all TTMA calls go through `lib/ttma-client.ts`; both are gated by `import "server-only"` so accidentally importing them in a client component is a build error.
+The keys live in `NINJA_API_KEY` + `TTMA_API_KEY` (server env), one per silo. All Ninja calls go through `lib/mbn-client.ts` (uses `ninjaApiKey`); all TTMA calls go through `lib/ttma-client.ts` (uses `ttmaApiKey`); both are gated by `import "server-only"` so accidentally importing them in a client component is a build error. Each Cloud Function reads the shared `apiKeys` Firestore collection but only ever handles its own silo's scopes, so neither key crosses APIs.
 
 ---
 
@@ -137,13 +143,13 @@ The API key lives in `MBN_API_KEY` (server env). The TTMA + Ninja Cloud Function
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| "Authentication required" / 401 | Missing or wrong `MBN_API_KEY` | Re-mint key, paste into `.env.local`, restart `npm run dev` |
+| "Authentication required" / 401 | Missing or wrong `NINJA_API_KEY` (or `TTMA_API_KEY` on the voice flow) | Re-mint the key in its dashboard, paste into `.env.local`, restart `npm run dev` |
 | "Insufficient scope" / 403 | Key missing `blueprints:deploy`, etc. | Mint a new key with the four required scopes |
 | "Deployment not found or access denied" | Key is per-instance scoped and doesn't include the chosen deployment | Re-mint with the deployment included, OR pick a different target |
 | Blueprints list comes back empty | API deployed but the key's owner has no blueprints | Save an agent as a blueprint in MoltBot Ninja first |
 | Catalog request fails immediately | `/v1/blueprints` not in the live OpenAPI | `firebase deploy --only functions` from ClawdBot Installer |
 | 504 gateway-timeout on provision | Agent creation hung > 90 s | Check the deployment is OPERATIONAL; restart fleet-agent on the host if needed |
-| **Voice flow:** "Could not load voice deployments" | Key missing `voice:read` OR no voice deployment in instance scope | Re-mint key with voice scopes + add the voice deployment id to `deploymentIds` |
+| **Voice flow:** "Could not load voice deployments" | `TTMA_API_KEY` missing `voice:read` OR no voice deployment in its instance scope | Re-mint the TTMA key (TTMA portal) with voice scopes + the voice deployment selected |
 | **Voice flow:** 409 `gateway-already-running` | A live gateway exists on the chosen voice deployment | Pass `forceReinstall: true` (the demo defaults this to `true` for the Install Voice button) OR pick a different voice deployment |
 | **Voice flow:** operation `failed` after ~60 s with no detail | install.sh failed on the fleet host (often: missing passwordless sudo for `systemctl stop ninja-talk-<agentId>`) | SSH to the host and run install.sh once manually to inspect; configure sudoers as documented in install.sh comments |
 

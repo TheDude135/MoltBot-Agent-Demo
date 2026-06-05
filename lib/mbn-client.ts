@@ -38,7 +38,7 @@ async function callApi<T>(
   pathAndQuery: string,
   init: RequestInit & { timeoutMs?: number; idempotencyKey?: string } = {},
 ): Promise<{ envelope: T; response: Response }> {
-  const { apiBase, apiKey } = getConfig();
+  const { apiBase, ninjaApiKey } = getConfig();
   const url = new URL(pathAndQuery, apiBase).toString();
   const timeoutMs = init.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -64,7 +64,7 @@ async function callApi<T>(
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${ninjaApiKey}`,
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...(needsIdempotencyKey && init.idempotencyKey
           ? { "Idempotency-Key": init.idempotencyKey }
