@@ -20,17 +20,18 @@ No Firebase SDK, no Firestore, no direct calls to the ClawdBot Installer project
 
 Steps 4-6 happen server-side inside a single `/api/provision` route so the API key never reaches the browser.
 
-### Voice install (optional phases 7-9; new in this revision)
+### Voice + Wix app install (optional phases 7-11)
 
-After the blueprint deploy lands cleanly, the user can opt in to attach a phone number:
+After the blueprint deploy lands cleanly, the user can opt in to attach a phone number and the Wix Bookings app:
 
 8. Lists the owner's TTMA voice deployments (`GET /v1/voice-deployments`)
 9. User picks a voice deployment
-10. Mints an install bundle at TTMA (`POST /v1/voice-deployments/:vid/install-bundles`)
-11. Forwards the bundle to Ninja (`POST /v1/deployments/:fleet/agents/:agentId/voice-installs`)
-12. Polls the install operation until terminal (`GET /v1/operations/:opId`)
+10. Installs the Wix Bookings app on that voice deployment (`POST /v1/voice-deployments/:vid/apps`) and confirms via `GET .../apps`. Installing the app BEFORE voice means its HMAC secret + tool reach the gateway from its very first config poll, so the agent can book from call one. The secret is **never** returned — the gateway self-fetches it.
+11. Mints an install bundle at TTMA (`POST /v1/voice-deployments/:vid/install-bundles`)
+12. Forwards the bundle to Ninja (`POST /v1/deployments/:fleet/agents/:agentId/voice-installs`)
+13. Polls the install operation until terminal (`GET /v1/operations/:opId`)
 
-Steps 10-11 happen server-side inside a single `/api/install-voice` route — same key, same never-in-the-browser rule.
+Step 10 is the `/api/install-app` route; steps 11-12 the `/api/install-voice` route — all server-side, the key never in the browser.
 
 The reference customer flow guide for the underlying voice install bundle protocol lives at [`docs/VOICE-INSTALL-BUNDLE-CUSTOMER-GUIDE.md`](../ClawdBot-Installer/docs/VOICE-INSTALL-BUNDLE-CUSTOMER-GUIDE.md) in the ClawdBot Installer repo.
 
@@ -47,9 +48,10 @@ You need **a MoltBot Ninja API key** with these scopes:
 - `blueprints:read`
 - `blueprints:deploy`
 
-**Optional for voice install (phases 8-12):**
+**Optional for voice + Wix app install:**
 
 - `voice:read` — list voice deployments
+- `voice:apps` — install the Wix Bookings app on the voice deployment
 - `voice:install-bundles` — mint install bundles at TTMA
 - `voice:install` — dispatch install at Ninja
 - `voice:uninstall` — DELETE flow (the demo doesn't ship a UI for this yet)
@@ -102,8 +104,11 @@ Next.js (port 3030)
     │      3. POST /v1/deployments/:id/blueprint-deploys
     ├─ /api/progress/:depId/:rid      ← proxy → /v1/deployments/:id/blueprint-deploys/:rid
     │
-    │  ─── voice flow (optional) ─────────────────────
+    │  ─── voice + Wix app flow (optional) ───────────
     ├─ /api/voice-deployments         ← proxy → TTMA /v1/voice-deployments
+    ├─ /api/install-app (POST)        ← install Wix app + confirm:
+    │      1. POST TTMA /v1/voice-deployments/:vid/apps
+    │      2. GET  TTMA /v1/voice-deployments/:vid/apps
     ├─ /api/install-voice (POST)      ← orchestrates:
     │      1. POST TTMA /v1/voice-deployments/:vid/install-bundles
     │      2. POST Ninja /v1/deployments/:fleet/agents/:agent/voice-installs

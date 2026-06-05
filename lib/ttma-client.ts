@@ -151,3 +151,66 @@ export async function mintInstallBundle(
   );
   return envelope.data.installBundle;
 }
+
+// ─── Marketplace app install (sync) ──────────────────────────────────
+//
+// Requires the `voice:apps` scope (in addition to the per-instance scope
+// on the voiceDeploymentId). The HMAC secret is NEVER returned — the
+// gateway self-fetches it on its next config poll, so installing the app
+// before voice means the booking tool is live from the gateway's first
+// poll.
+
+export interface InstallAppInput {
+  voiceDeploymentId: string;
+  /** App catalog slug, e.g. "wix-bookings". */
+  slug: string;
+  /** Per-slug config. For wix-bookings: { siteUrl (https, public host),
+   *  businessName?, timezone? (IANA), language?, wixAppId? }. */
+  config: Record<string, unknown>;
+  /** Idempotency-Key header. Replays within 24h return the cached response. */
+  idempotencyKey: string;
+}
+
+export interface InstalledApp {
+  slug: string;
+  status: string;
+  /** true on a fresh create (201), false on an idempotent re-install (200). */
+  created: boolean;
+}
+
+/** POST /v1/voice-deployments/:vid/apps — install a marketplace app.
+ *  201 on first install, 200 on idempotent same-config re-install, 409
+ *  (app-config-conflict) if the slug exists with a different config. */
+export async function installApp(input: InstallAppInput): Promise<InstalledApp> {
+  const { envelope } = await callTtma<RequestEnvelope<{ app: InstalledApp }>>(
+    `/v1/voice-deployments/${encodeURIComponent(input.voiceDeploymentId)}/apps`,
+    {
+      method: "POST",
+      idempotencyKey: input.idempotencyKey,
+      body: JSON.stringify({ slug: input.slug, config: input.config }),
+    },
+  );
+  return envelope.data.app;
+}
+
+export interface InstalledAppSummary {
+  slug: string;
+  status: string;
+  config: {
+    siteUrl: string | null;
+    businessName?: string;
+    timezone?: string;
+    language?: string;
+  };
+  installedAt: string | null;
+}
+
+/** GET /v1/voice-deployments/:vid/apps — list installed apps. No secrets. */
+export async function listApps(
+  voiceDeploymentId: string,
+): Promise<InstalledAppSummary[]> {
+  const { envelope } = await callTtma<RequestEnvelope<{ apps: InstalledAppSummary[] }>>(
+    `/v1/voice-deployments/${encodeURIComponent(voiceDeploymentId)}/apps`,
+  );
+  return envelope.data.apps;
+}

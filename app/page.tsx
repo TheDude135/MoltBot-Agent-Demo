@@ -13,8 +13,10 @@
 //   5. progress         — poll /api/progress until terminal
 //   6. done             — deploy success; offer optional voice attach
 //   7. pick-voice       — list voice deployments via /api/voice-deployments
-//   8. installing-voice — POST /api/install-voice, poll /api/voice-operation
-//   9. voice-done       — phone is live on the sub-agent
+//   8. installing-app   — POST /api/install-app (install the Wix Bookings app
+//                         on the voice deployment, before the gateway boots)
+//   9. installing-voice — POST /api/install-voice, poll /api/voice-operation
+//  10. voice-done       — phone is live + Wix app installed on the sub-agent
 //      error            — terminal failure (any stage)
 //
 // No API key, no Firestore credential, no SDK in the browser bundle —
@@ -48,6 +50,7 @@ type Phase =
   | "progress"
   | "done"
   | "pick-voice"
+  | "installing-app"
   | "installing-voice"
   | "voice-done"
   | "error";
@@ -119,6 +122,8 @@ export default function Page() {
     phoneNumber: string | null;
   } | null>(null);
   const [voiceOperation, setVoiceOperation] = useState<VoiceOperation | null>(null);
+  // Wix app install — installed on the voice deployment before voice install.
+  const [wixAppInstalled, setWixAppInstalled] = useState(false);
 
   // Load catalog on mount
   useEffect(() => {
@@ -352,6 +357,7 @@ export default function Page() {
     setSelectedVoiceDeploymentId("");
     setVoiceInstallContext(null);
     setVoiceOperation(null);
+    setWixAppInstalled(false);
   };
 
   // ── Voice install flow ─────────────────────────────────────────────
@@ -418,6 +424,54 @@ export default function Page() {
       setPhase("error");
     }
   }, [provisionContext, selectedVoiceDeploymentId]);
+
+  // Install the Wix Bookings app on the chosen voice deployment, THEN
+  // install voice. Order matters: installing the app first means its secret
+  // + tool are delivered to the gateway from its very first config poll, so
+  // the agent can book from call one. If there's no Wix config (the user
+  // skipped introspection), we just install voice.
+  const submitInstallAppThenVoice = useCallback(async () => {
+    if (!provisionContext || !selectedVoiceDeploymentId) return;
+    setProvisionError(null);
+    const siteUrl = introspectSummary?.canonicalUrl;
+
+    if (siteUrl) {
+      setPhase("installing-app");
+      const requestId = generateRequestId();
+      try {
+        const res = await fetch("/api/install-app", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            voiceDeploymentId: selectedVoiceDeploymentId,
+            slug: "wix-bookings",
+            config: {
+              siteUrl,
+              ...(introspectSummary?.businessName
+                ? { businessName: introspectSummary.businessName }
+                : {}),
+            },
+            requestId,
+          }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            (body as { error?: string }).error ??
+              `Wix app install failed (HTTP ${res.status}).`,
+          );
+        }
+        setWixAppInstalled(true);
+      } catch (err) {
+        setProvisionError((err as Error).message);
+        setPhase("error");
+        return;
+      }
+    }
+
+    // App is installed (or skipped) — now mint the bundle + dispatch voice.
+    await submitInstallVoice();
+  }, [provisionContext, selectedVoiceDeploymentId, introspectSummary, submitInstallVoice]);
 
   // Poll the voice install operation until terminal. Same pattern as the
   // blueprint-deploy progress polling above.
@@ -562,9 +616,16 @@ export default function Page() {
           selectedVoiceDeploymentId={selectedVoiceDeploymentId}
           onChangeSelected={setSelectedVoiceDeploymentId}
           onBack={() => setPhase("done")}
-          onSubmit={submitInstallVoice}
+          onSubmit={submitInstallAppThenVoice}
           onSkip={() => setPhase("done")}
           canSubmit={Boolean(selectedVoiceDeploymentId)}
+        />
+      )}
+
+      {phase === "installing-app" && (
+        <CenteredStatus
+          label="Installing Wix Bookings app..."
+          detail="Registering the booking app on your voice deployment (POST /apps). The gateway picks up the secret + tool on its next config poll, so the agent can book from call one."
         />
       )}
 
@@ -580,6 +641,7 @@ export default function Page() {
         <VoiceDonePhase
           phoneNumber={voiceInstallContext?.phoneNumber ?? null}
           agentId={provisionContext?.agentId ?? "(unknown)"}
+          wixInstalled={wixAppInstalled}
           onReset={reset}
         />
       )}

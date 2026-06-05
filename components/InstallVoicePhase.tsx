@@ -95,10 +95,13 @@ export function InstallVoicePhase({
 export function VoiceDonePhase({
   phoneNumber,
   agentId,
+  wixInstalled,
   onReset,
 }: {
   phoneNumber: string | null;
   agentId: string;
+  /** True when the Wix Bookings app was installed on the voice deployment. */
+  wixInstalled?: boolean;
   onReset: () => void;
 }) {
   return (
@@ -116,6 +119,12 @@ export function VoiceDonePhase({
         <p className="mt-2 text-xs text-gray-500">
           Dial that number — the new sub-agent picks up.
         </p>
+        {wixInstalled && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+            ✓ Wix Bookings installed — the agent can answer service/price
+            questions and book real appointments
+          </p>
+        )}
       </div>
       <button
         onClick={onReset}
