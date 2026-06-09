@@ -4,7 +4,7 @@
 "use client";
 
 import type { Blueprint } from "@/lib/types";
-import { CenteredStatus, Chip } from "./atoms";
+import { Card, CenteredStatus, Chip, PhaseHeader } from "./atoms";
 
 export function CatalogPhase({
   blueprints,
@@ -27,11 +27,11 @@ export function CatalogPhase({
   }
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
-        <p className="font-semibold text-red-300">Could not load catalog</p>
-        <p className="mt-1 text-sm text-red-200/80">{error}</p>
-        <p className="mt-3 text-xs text-red-200/60">
-          Hint: confirm MBN_API_KEY in .env.local has the
+      <Card className="border-rose-500/30 bg-rose-500/[0.08] p-5">
+        <p className="font-semibold text-rose-300">Could not load catalog</p>
+        <p className="mt-1 text-sm text-rose-200/80">{error}</p>
+        <p className="mt-3 text-xs text-rose-200/60">
+          Hint: confirm NINJA_API_KEY in .env.local has the
           <code className="mx-1 rounded bg-black/30 px-1 font-mono">
             blueprints:read
           </code>
@@ -39,33 +39,33 @@ export function CatalogPhase({
           <code className="mx-1 rounded bg-black/30 px-1 font-mono">
             deployments:read
           </code>
-          scopes, AND that the API itself is deployed (api.moltbot.ninja must
-          list /v1/blueprints in /v1/openapi.json).
+          scopes, and that the dev server was restarted after editing .env.local.
         </p>
-      </div>
+      </Card>
     );
   }
   if (blueprints.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+      <Card className="p-6 text-center">
         <p className="text-sm font-semibold text-gray-300">No blueprints yet</p>
         <p className="mt-1 text-xs text-gray-500">
           Save an agent as a blueprint in MoltBot Ninja first, then come back.
         </p>
-      </div>
+      </Card>
     );
   }
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-        Pick a blueprint
-      </h2>
+    <div className="space-y-4">
+      <PhaseHeader
+        title="Pick a blueprint"
+        description="Each blueprint is a pre-configured agent. Clone one and tailor it to your business."
+      />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {blueprints.map((bp) => (
           <button
             key={bp.id}
             onClick={() => onSelect(bp)}
-            className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-left transition-all hover:border-violet-500/40 hover:bg-violet-500/[0.04]"
+            className="group rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-left shadow-[0_20px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-violet-500/50 hover:bg-violet-500/[0.06]"
           >
             <p className="text-sm font-semibold text-white">{bp.name}</p>
             {bp.description && (

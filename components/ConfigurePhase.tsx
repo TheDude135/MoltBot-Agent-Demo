@@ -5,7 +5,8 @@
 "use client";
 
 import type { Blueprint, BlueprintVariable, Deployment } from "@/lib/types";
-import { Label, Section } from "./atoms";
+import { EMOJI_VARIABLE_KEY } from "@/lib/types";
+import { Button, Label, PhaseHeader, Section } from "./atoms";
 
 const EMOJI_OPTIONS = ["🤖", "🧠", "💼", "📞", "🎯", "⭐", "🔥", "💡", "🚀", "🛠️", "📊", "🎨"];
 
@@ -18,6 +19,8 @@ export function ConfigurePhase(props: {
   onChangeTargetDeploymentId: (v: string) => void;
   agentName: string;
   onChangeAgentName: (v: string) => void;
+  /** Inline error when the derived agentId is already taken on the deployment. */
+  nameError?: string | null;
   generatedAgentId: string;
   agentEmoji: string;
   onChangeAgentEmoji: (v: string) => void;
@@ -36,29 +39,19 @@ export function ConfigurePhase(props: {
   const noOperational =
     props.deployments.length === 0 && props.allDeployments.length > 0;
 
+  // The agent emoji is driven solely by the identity picker above, so hide the
+  // blueprint's agent_emoji variable from the list — one control, never two.
+  const visibleVariables = props.blueprint.variables.filter(
+    (v) => v.key !== EMOJI_VARIABLE_KEY,
+  );
+
   return (
     <div className="space-y-5">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wider text-gray-500">
-            Configure
-          </p>
-          <h2 className="mt-0.5 text-base font-bold text-white">
-            Deploy from: {props.blueprint.name}
-          </h2>
-          {props.blueprint.description && (
-            <p className="mt-0.5 text-xs text-gray-500">
-              {props.blueprint.description}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={props.onBack}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-400 hover:bg-white/5 hover:text-white"
-        >
-          ← Back
-        </button>
-      </header>
+      <PhaseHeader
+        title={`Configure ${props.blueprint.name}`}
+        description={props.blueprint.description || undefined}
+        onBack={props.onBack}
+      />
 
       {props.introspectSummary && (
         <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-3">
@@ -144,12 +137,20 @@ export function ConfigurePhase(props: {
               value={props.agentName}
               onChange={(e) => props.onChangeAgentName(e.target.value)}
               placeholder="e.g. Sarah Collection Bot"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-violet-500 focus:outline-none"
+              className={`w-full rounded-xl border bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none ${
+                props.nameError
+                  ? "border-rose-500/60 focus:border-rose-500"
+                  : "border-white/10 focus:border-violet-500"
+              }`}
             />
-            {props.agentName && (
-              <p className="mt-1 font-mono text-[10px] text-gray-600">
-                agentId: {props.generatedAgentId || "(invalid)"}
-              </p>
+            {props.nameError ? (
+              <p className="mt-1 text-[11px] text-rose-300">{props.nameError}</p>
+            ) : (
+              props.agentName && (
+                <p className="mt-1 font-mono text-[10px] text-gray-600">
+                  agentId: {props.generatedAgentId || "(invalid)"}
+                </p>
+              )
             )}
           </div>
           <div>
@@ -174,10 +175,10 @@ export function ConfigurePhase(props: {
         </div>
       </Section>
 
-      {props.blueprint.variables.length > 0 && (
-        <Section title={`Variables (${props.blueprint.variables.length})`}>
+      {visibleVariables.length > 0 && (
+        <Section title={`Variables (${visibleVariables.length})`}>
           <div className="space-y-3">
-            {props.blueprint.variables.map((v) => (
+            {visibleVariables.map((v) => (
               <VariableField
                 key={v.key}
                 variable={v}
@@ -189,13 +190,14 @@ export function ConfigurePhase(props: {
         </Section>
       )}
 
-      <button
+      <Button
         onClick={props.onSubmit}
         disabled={!props.canSubmit}
-        className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+        fullWidth
+        leadingIcon={<span>🚀</span>}
       >
-        🚀 Create &amp; Deploy
-      </button>
+        Create &amp; Deploy
+      </Button>
     </div>
   );
 }

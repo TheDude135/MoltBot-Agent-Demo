@@ -32,15 +32,17 @@ import type {
   VoiceDeployment,
   VoiceOperation,
 } from "@/lib/types";
+import { EMOJI_VARIABLE_KEY } from "@/lib/types";
 import { generateAgentId, generateRequestId, isValidAgentId } from "@/lib/ids";
 import { CatalogPhase } from "@/components/CatalogPhase";
 import { UrlPhase } from "@/components/UrlPhase";
 import { ConfigurePhase } from "@/components/ConfigurePhase";
 import { ProgressPhase } from "@/components/ProgressPhase";
-import { DonePhase, ErrorPhase } from "@/components/DonePhase";
+import { DonePhase, ErrorPhase, type SeedNote } from "@/components/DonePhase";
 import { PickVoiceDeploymentPhase } from "@/components/PickVoiceDeploymentPhase";
 import { InstallVoicePhase, VoiceDonePhase } from "@/components/InstallVoicePhase";
 import { CenteredStatus } from "@/components/atoms";
+import { Stepper } from "@/components/Stepper";
 
 type Phase =
   | "catalog"
@@ -70,6 +72,26 @@ interface IntrospectErrorBody {
 }
 
 const PROGRESS_POLL_INTERVAL_MS = 2000;
+// Hard deadlines so a wedged upstream operation can never spin the UI
+// forever. On timeout we surface an actionable error instead of hanging.
+const PROGRESS_POLL_TIMEOUT_MS = 5 * 60_000;
+const VOICE_POLL_TIMEOUT_MS = 5 * 60_000;
+
+// Which of the 5 stepper steps (Blueprint, Site, Configure, Deploy, Voice)
+// each phase belongs to. Drives the global progress indicator.
+const STEP_FOR_PHASE: Record<Phase, number> = {
+  catalog: 0,
+  url: 1,
+  configure: 2,
+  provisioning: 3,
+  progress: 3,
+  done: 3,
+  "pick-voice": 4,
+  "installing-app": 4,
+  "installing-voice": 4,
+  "voice-done": 4,
+  error: 3,
+};
 
 export default function Page() {
   const [phase, setPhase] = useState<Phase>("catalog");
@@ -104,12 +126,25 @@ export default function Page() {
 
   // Provisioning state
   const [provisionError, setProvisionError] = useState<string | null>(null);
+  // Recoverable name collision (derived agentId already exists on the
+  // deployment). Shown inline on the Configure screen so the user can rename
+  // without losing their setup, instead of dead-ending on the error screen.
+  const [nameError, setNameError] = useState<string | null>(null);
   const [provisionContext, setProvisionContext] = useState<{
     requestId: string;
     deploymentId: string;
     agentId: string;
   } | null>(null);
   const [deployRecord, setDeployRecord] = useState<BlueprintDeployRecord | null>(null);
+
+  // AI file-seeding state — best-effort enrichment that runs once the
+  // blueprint deploy completes. A ref guards against the progress poller
+  // (which fires repeatedly) kicking off more than one seeding run.
+  const [seedNote, setSeedNote] = useState<SeedNote | null>(null);
+  const seedStartedRef = useRef(false);
+  // Run token: bumped on reset / new provision so a slow seeding request
+  // that resolves after the user has moved on can't repaint a stale note.
+  const seedTokenRef = useRef(0);
 
   // Voice install state — populated only after the blueprint deploy
   // succeeds and the user opts in to attach a phone.
@@ -180,6 +215,11 @@ export default function Page() {
       defaults[v.key] = v.default ?? "";
     }
     setVariableValues(defaults);
+    // The emoji is a single control (the identity picker). Seed it from the
+    // blueprint's agent_emoji default when present; the picker stays the sole
+    // source of truth and is mirrored back into the variable at submit.
+    const emojiDefault = bp.variables.find((v) => v.key === EMOJI_VARIABLE_KEY)?.default?.trim();
+    setAgentEmoji(emojiDefault || "🤖");
     // Reset any prior URL-phase state from earlier deploys in the same session.
     setSiteUrl("");
     setIntrospectError(null);
@@ -255,11 +295,86 @@ export default function Page() {
       isValidAgentId(generatedAgentId),
   );
 
-  // Progress polling
+  // AI file-seeding runner. Best-effort: the agent already works off the
+  // blueprint's templated files, so any failure here just keeps those and
+  // surfaces a note. Guarded by seedStartedRef so the progress poller can't
+  // start it twice.
+  const runSeedFiles = useCallback(async () => {
+    if (seedStartedRef.current) return;
+    const ctx = provisionContext;
+    const url = introspectSummary?.canonicalUrl;
+    if (!ctx || !url) return;
+    seedStartedRef.current = true;
+    // Claim this run. If the user resets/redeploys while we're awaiting,
+    // seedTokenRef bumps and `post` becomes a no-op, so a late resolve can't
+    // repaint a note onto a fresh flow.
+    const token = seedTokenRef.current;
+    const post = (note: SeedNote) => {
+      if (seedTokenRef.current === token) setSeedNote(note);
+    };
+    post({ status: "running", message: "Reading the site and tailoring the agent's persona…" });
+    try {
+      const res = await fetch("/api/seed-files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deploymentId: ctx.deploymentId,
+          agentId: ctx.agentId,
+          siteUrl: url,
+          requestId: ctx.requestId,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        post({
+          status: "error",
+          message: body?.error ?? `Seeding request failed (${res.status}).`,
+        });
+        return;
+      }
+      if (body?.seeded) {
+        const files = (body.files ?? []) as { path: string; status: string }[];
+        const written = files.filter((f) => f.status === "written").map((f) => f.path);
+        const failed = files.filter((f) => f.status !== "written").map((f) => f.path);
+        post({
+          status: written.length > 0 ? "seeded" : "error",
+          message:
+            written.length > 0
+              ? `Wrote ${written.join(", ")}${failed.length ? ` (failed: ${failed.join(", ")})` : ""}.`
+              : `No files written${failed.length ? ` (failed: ${failed.join(", ")})` : ""}.`,
+        });
+      } else {
+        // Skipped by design (e.g. AI disabled) — the templated files stand.
+        post({
+          status: "skipped",
+          message: body?.message ?? "Kept the blueprint's templated files.",
+        });
+      }
+    } catch (err) {
+      post({ status: "error", message: (err as Error).message });
+    }
+  }, [provisionContext, introspectSummary]);
+
+  // Hold the latest runSeedFiles in a ref so the progress effect can call it
+  // without listing it as a dependency (which would tear down + re-subscribe
+  // the poller whenever introspectSummary/provisionContext identity changes,
+  // and double-fire under React StrictMode in dev).
+  const runSeedFilesRef = useRef(runSeedFiles);
+  useEffect(() => {
+    runSeedFilesRef.current = runSeedFiles;
+  }, [runSeedFiles]);
+
+  // Progress polling — bounded by PROGRESS_POLL_TIMEOUT_MS so a stuck deploy
+  // surfaces an error instead of spinning forever.
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (phase !== "progress" || !provisionContext) return;
     let cancelled = false;
+    const deadline = Date.now() + PROGRESS_POLL_TIMEOUT_MS;
+    const stop = () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    };
     const tick = async () => {
       try {
         const res = await fetch(
@@ -275,13 +390,26 @@ export default function Page() {
         setDeployRecord(json.deploy);
         const status: DeployStatus = json.deploy.status;
         if (status === "complete" || status === "partial" || status === "failed") {
-          if (pollingRef.current) clearInterval(pollingRef.current);
+          stop();
+          // Fire AI seeding once, only on a clean complete (so we never
+          // overwrite files on a half-deployed agent). Fire-and-forget:
+          // the done phase renders immediately and the seed note updates
+          // when it resolves.
+          if (status === "complete") void runSeedFilesRef.current();
           setPhase("done");
+          return;
+        }
+        if (Date.now() > deadline) {
+          stop();
+          setProvisionError(
+            "The deploy did not finish within 5 minutes. Check the agent in MoltBot Ninja, then try again.",
+          );
+          setPhase("error");
         }
       } catch (err) {
         if (cancelled) return;
+        stop();
         setProvisionError((err as Error).message);
-        if (pollingRef.current) clearInterval(pollingRef.current);
         setPhase("error");
       }
     };
@@ -290,8 +418,7 @@ export default function Page() {
     pollingRef.current = setInterval(tick, PROGRESS_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = null;
+      stop();
     };
   }, [phase, provisionContext]);
 
@@ -299,16 +426,29 @@ export default function Page() {
     if (!selectedBlueprint || !canSubmit) return;
     setProvisionError(null);
     setDeployRecord(null);
+    setSeedNote(null);
+    seedStartedRef.current = false;
+    seedTokenRef.current++;
+    setNameError(null);
     setPhase("provisioning");
 
     const requestId = generateRequestId();
+    // The identity emoji (picker) is the single source of truth. When the
+    // blueprint defines an agent_emoji variable (used in its persona files),
+    // mirror the picker into it so the Ninja UI icon, the managed-agent
+    // identity, and the persona never diverge — one control, one value. Only
+    // inject it when the blueprint actually declares the variable, so we never
+    // send an unknown key for blueprints that don't use it.
+    const variables = selectedBlueprint.variables.some((v) => v.key === EMOJI_VARIABLE_KEY)
+      ? { ...variableValues, [EMOJI_VARIABLE_KEY]: agentEmoji }
+      : variableValues;
     const payload = {
       deploymentId: targetDeploymentId,
       agentId: generatedAgentId,
       name: agentName.trim(),
       emoji: agentEmoji,
       blueprintId: selectedBlueprint.id,
-      variables: variableValues,
+      variables,
       requestId,
     };
 
@@ -320,6 +460,17 @@ export default function Page() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // A name collision (the derived agentId already exists on this
+        // deployment) is recoverable: go back to Configure with a clear
+        // inline message so the user can just rename, keeping everything
+        // else (deployment, variables, the site they introspected).
+        if (res.status === 409 || body?.code === "agent-id-taken") {
+          setNameError(
+            `The id "${generatedAgentId}" is already taken on this deployment. Pick a different name.`,
+          );
+          setPhase("configure");
+          return;
+        }
         throw new Error(
           body?.error ??
             `Provision failed (${res.status})${body?.step ? ` at ${body.step}` : ""}`,
@@ -348,8 +499,12 @@ export default function Page() {
     setIntrospectError(null);
     setIntrospectSummary(null);
     setProvisionError(null);
+    setNameError(null);
     setProvisionContext(null);
     setDeployRecord(null);
+    setSeedNote(null);
+    seedStartedRef.current = false;
+    seedTokenRef.current++;
     // Reset voice state too — a fresh deploy flow shouldn't inherit
     // the previous attempt's voice selection.
     setVoiceDeployments([]);
@@ -479,6 +634,11 @@ export default function Page() {
   useEffect(() => {
     if (phase !== "installing-voice" || !voiceInstallContext) return;
     let cancelled = false;
+    const deadline = Date.now() + VOICE_POLL_TIMEOUT_MS;
+    const stop = () => {
+      if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+      voicePollingRef.current = null;
+    };
     const tick = async () => {
       try {
         const res = await fetch(
@@ -495,19 +655,29 @@ export default function Page() {
         const op = (body as { operation: VoiceOperation }).operation;
         setVoiceOperation(op);
         if (op.status === "succeeded") {
-          if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+          stop();
           setPhase("voice-done");
-        } else if (op.status === "failed") {
-          if (voicePollingRef.current) clearInterval(voicePollingRef.current);
+          return;
+        }
+        if (op.status === "failed") {
+          stop();
           setProvisionError(
             op.error?.message ?? "Voice install failed without a message.",
+          );
+          setPhase("error");
+          return;
+        }
+        if (Date.now() > deadline) {
+          stop();
+          setProvisionError(
+            "The voice install did not finish within 5 minutes. The number may still come online — check the TTMA portal, or try again.",
           );
           setPhase("error");
         }
       } catch (err) {
         if (cancelled) return;
+        stop();
         setProvisionError((err as Error).message);
-        if (voicePollingRef.current) clearInterval(voicePollingRef.current);
         setPhase("error");
       }
     };
@@ -515,25 +685,38 @@ export default function Page() {
     voicePollingRef.current = setInterval(tick, PROGRESS_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      if (voicePollingRef.current) clearInterval(voicePollingRef.current);
-      voicePollingRef.current = null;
+      stop();
     };
   }, [phase, voiceInstallContext]);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
-          🪄
+    <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+      <header className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 text-lg shadow-lg shadow-violet-700/30">
+            🪄
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-white">
+              Agent Deploy
+            </h1>
+            <p className="text-xs text-gray-500">
+              Provision a voice agent from a blueprint
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-bold text-white">Agent Deploy Demo</h1>
-          <p className="text-xs text-gray-500">
-            External app, public REST API only. No SDK, no Firestore.
-          </p>
-        </div>
+        <span className="hidden rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] font-medium text-gray-400 sm:inline">
+          Public REST API · no SDK
+        </span>
       </header>
 
+      {phase !== "error" && (
+        <div className="mb-8">
+          <Stepper current={STEP_FOR_PHASE[phase]} />
+        </div>
+      )}
+
+      <div key={phase} className="animate-fade-in">
       {phase === "catalog" && (
         <CatalogPhase
           blueprints={blueprints}
@@ -567,7 +750,11 @@ export default function Page() {
           targetDeploymentId={targetDeploymentId}
           onChangeTargetDeploymentId={setTargetDeploymentId}
           agentName={agentName}
-          onChangeAgentName={setAgentName}
+          onChangeAgentName={(v) => {
+            setAgentName(v);
+            if (nameError) setNameError(null);
+          }}
+          nameError={nameError}
           generatedAgentId={generatedAgentId}
           agentEmoji={agentEmoji}
           onChangeAgentEmoji={setAgentEmoji}
@@ -584,8 +771,8 @@ export default function Page() {
 
       {phase === "provisioning" && (
         <CenteredStatus
-          label="Creating sub-agent..."
-          detail="The API is provisioning a new agent on your deployment. This can take 30-60s."
+          label="Creating your agent"
+          detail="Provisioning a new sub-agent on your deployment. This usually takes 30 to 60 seconds."
         />
       )}
 
@@ -604,6 +791,7 @@ export default function Page() {
           onAttachVoice={
             deployRecord?.status === "complete" ? handleAttachVoice : undefined
           }
+          seedNote={seedNote}
         />
       )}
 
@@ -624,8 +812,8 @@ export default function Page() {
 
       {phase === "installing-app" && (
         <CenteredStatus
-          label="Installing Wix Bookings app..."
-          detail="Registering the booking app on your voice deployment (POST /apps). The gateway picks up the secret + tool on its next config poll, so the agent can book from call one."
+          label="Installing Wix Bookings"
+          detail="Registering the booking app on your voice number so the agent can answer service and price questions and book real appointments from the first call."
         />
       )}
 
@@ -649,6 +837,7 @@ export default function Page() {
       {phase === "error" && (
         <ErrorPhase message={provisionError ?? "Unknown error"} onReset={reset} />
       )}
+      </div>
     </main>
   );
 }

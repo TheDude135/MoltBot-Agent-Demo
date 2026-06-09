@@ -6,7 +6,7 @@
 "use client";
 
 import type { VoiceDeployment } from "@/lib/types";
-import { CenteredStatus, Chip, Section } from "./atoms";
+import { Button, Card, CenteredStatus, Chip, PhaseHeader, Section } from "./atoms";
 
 export function PickVoiceDeploymentPhase({
   voiceDeployments,
@@ -42,29 +42,23 @@ export function PickVoiceDeploymentPhase({
 
   if (error) {
     return (
-      <div className="space-y-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
-        <p className="font-semibold text-red-300">Could not load voice deployments</p>
-        <p className="text-sm text-red-200/80">{error}</p>
-        <p className="text-xs text-red-200/60">
+      <Card className="space-y-3 border-rose-500/30 bg-rose-500/[0.08] p-5">
+        <p className="font-semibold text-rose-300">Could not load voice deployments</p>
+        <p className="text-sm text-rose-200/80">{error}</p>
+        <p className="text-xs text-rose-200/60">
           Hint: your API key needs the
           <code className="mx-1 rounded bg-black/30 px-1 font-mono">voice:read</code>
           scope and must be scoped to at least one voice deployment.
         </p>
         <div className="flex gap-2 pt-2">
-          <button
-            onClick={onBack}
-            className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-bold text-gray-300 hover:bg-white/5"
-          >
+          <Button size="sm" variant="secondary" onClick={onBack}>
             Back
-          </button>
-          <button
-            onClick={onSkip}
-            className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-bold text-gray-300 hover:bg-white/5"
-          >
+          </Button>
+          <Button size="sm" variant="secondary" onClick={onSkip}>
             Skip voice
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -76,7 +70,7 @@ export function PickVoiceDeploymentPhase({
 
   if (usable.length === 0) {
     return (
-      <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+      <Card className="space-y-4 p-6">
         <div>
           <p className="text-base font-bold text-white">
             No voice deployments available
@@ -96,36 +90,24 @@ export function PickVoiceDeploymentPhase({
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={onBack}
-            className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-bold text-gray-300 hover:bg-white/5"
-          >
+          <Button size="sm" variant="secondary" onClick={onBack}>
             Back
-          </button>
-          <button
-            onClick={onSkip}
-            className="rounded-xl bg-violet-500/15 px-3 py-1.5 text-xs font-bold text-violet-200 hover:bg-violet-500/25"
-          >
-            Skip voice
-          </button>
+          </Button>
+          <Button size="sm" onClick={onSkip}>
+            Finish without voice
+          </Button>
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-5">
-      <header className="space-y-1">
-        <p className="text-xs uppercase tracking-wider text-gray-500">Phase 5</p>
-        <h2 className="text-base font-bold text-white">
-          Give "{agentId}" a phone
-        </h2>
-        <p className="text-xs text-gray-500">
-          Pick a voice deployment you own. The install rotates the gateway's
-          HMAC secret and binds the number to this agent. Calls to the
-          number will reach this sub-agent's voice playbook.
-        </p>
-      </header>
+      <PhaseHeader
+        title={`Give ${agentId} a phone`}
+        description="Pick a voice deployment you own. The install binds the number to this agent, so calls reach this sub-agent's voice playbook."
+        onBack={onBack}
+      />
 
       <Section title="Your voice deployments">
         <div className="space-y-2">
@@ -180,25 +162,18 @@ export function PickVoiceDeploymentPhase({
       </Section>
 
       <div className="flex items-center gap-2 pt-2">
-        <button
-          onClick={onBack}
-          className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-gray-300 hover:bg-white/5"
-        >
-          Back
-        </button>
-        <button
-          onClick={onSkip}
-          className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-gray-300 hover:bg-white/5"
-        >
+        <Button size="sm" variant="ghost" onClick={onSkip}>
           Skip voice
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
           onClick={onSubmit}
           disabled={!canSubmit}
-          className="ml-auto rounded-xl bg-violet-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-violet-500/30 hover:bg-violet-400 disabled:bg-white/10 disabled:text-gray-500 disabled:shadow-none"
+          leadingIcon={<span>📞</span>}
+          className="ml-auto"
         >
           Install voice
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -201,6 +201,48 @@ export async function installApp(input: InstallAppInput): Promise<InstalledApp> 
   return envelope.data.app;
 }
 
+/** PATCH /v1/voice-deployments/:vid/apps/:slug — reconfigure an already-installed
+ *  app's config (e.g. point wix-bookings at a different site). The HMAC secret is
+ *  untouched; the gateway picks up the new config on its next poll. */
+export async function reconfigureApp(input: InstallAppInput): Promise<InstalledApp> {
+  const { envelope } = await callTtma<
+    RequestEnvelope<{ app: { slug: string; status: string } }>
+  >(
+    `/v1/voice-deployments/${encodeURIComponent(input.voiceDeploymentId)}/apps/${encodeURIComponent(input.slug)}`,
+    {
+      method: "PATCH",
+      idempotencyKey: input.idempotencyKey,
+      body: JSON.stringify({ config: input.config }),
+    },
+  );
+  // Normalize to InstalledApp: a reconfigure is not a fresh create.
+  return { slug: envelope.data.app.slug, status: envelope.data.app.status, created: false };
+}
+
+/** Install the app, or reconfigure it if one already exists for this number with
+ *  a DIFFERENT config — i.e. the number was reused for a different business/site.
+ *  Result: the app always ends up pointing at `config`, so a fresh deploy on a
+ *  reused number "just works" instead of failing with app-config-conflict.
+ *
+ *  Why the demo (not the API) does this: the install endpoint is intentionally
+ *  strict ("accept-if-same", never silently clobber a different config). The
+ *  deploy orchestrator is the right place to decide install-vs-reconfigure. */
+export async function ensureApp(input: InstallAppInput): Promise<InstalledApp> {
+  try {
+    return await installApp(input);
+  } catch (err) {
+    if (err instanceof TtmaApiError && err.problemType === "app-config-conflict") {
+      // Distinct Idempotency-Key so the reconfigure is not conflated with the
+      // failed install replay under the same key.
+      return await reconfigureApp({
+        ...input,
+        idempotencyKey: `${input.idempotencyKey}-reconfigure`,
+      });
+    }
+    throw err;
+  }
+}
+
 export interface InstalledAppSummary {
   slug: string;
   status: string;

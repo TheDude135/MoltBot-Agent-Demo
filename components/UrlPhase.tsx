@@ -5,7 +5,7 @@
 "use client";
 
 import type { Blueprint } from "@/lib/types";
-import { Section } from "./atoms";
+import { Button, PhaseHeader, Section } from "./atoms";
 
 export function UrlPhase(props: {
   blueprint: Blueprint;
@@ -18,27 +18,11 @@ export function UrlPhase(props: {
 }) {
   return (
     <div className="space-y-5">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wider text-gray-500">
-            Step 1 — your site
-          </p>
-          <h2 className="mt-0.5 text-base font-bold text-white">
-            What is your Wix Bookings site?
-          </h2>
-          <p className="mt-1 text-xs text-gray-500">
-            We&apos;ll read your services, prices, and staff from the public Wix
-            site and pre-fill the next page so you don&apos;t have to copy them by
-            hand.
-          </p>
-        </div>
-        <button
-          onClick={props.onBack}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-400 hover:bg-white/5 hover:text-white"
-        >
-          ← Back
-        </button>
-      </header>
+      <PhaseHeader
+        title="What is your Wix Bookings site?"
+        description="We'll read your services, prices, and staff from the public Wix site and pre-fill the next page, so you don't have to copy them by hand."
+        onBack={props.onBack}
+      />
 
       <Section title="Site URL">
         <input
@@ -78,20 +62,15 @@ export function UrlPhase(props: {
         </div>
       )}
 
-      <button
+      <Button
         onClick={props.onSubmit}
-        disabled={props.introspecting || props.siteUrl.trim().length === 0}
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition-all hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={props.siteUrl.trim().length === 0}
+        loading={props.introspecting}
+        fullWidth
+        leadingIcon={!props.introspecting ? <span>🔍</span> : undefined}
       >
-        {props.introspecting ? (
-          <>
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            Reading your site...
-          </>
-        ) : (
-          <>🔍 Inspect site</>
-        )}
-      </button>
+        {props.introspecting ? "Reading your site…" : "Inspect site"}
+      </Button>
     </div>
   );
 }

@@ -7,7 +7,7 @@
 "use client";
 
 import type { VoiceOperation } from "@/lib/types";
-import { CenteredStatus, Chip } from "./atoms";
+import { Button, Card, CenteredStatus, Chip, PhaseHeader } from "./atoms";
 
 export function InstallVoicePhase({
   phoneNumber,
@@ -33,20 +33,13 @@ export function InstallVoicePhase({
 
   const status = operation.status;
   return (
-    <div className="space-y-3">
-      <header>
-        <p className="text-xs uppercase tracking-wider text-gray-500">Phase 6</p>
-        <h2 className="text-base font-bold text-white">
-          Installing voice on {agentId}
-        </h2>
-        {phoneNumber && (
-          <p className="mt-1 font-mono text-xs text-gray-500">
-            target {phoneNumber}
-          </p>
-        )}
-      </header>
+    <div className="space-y-4">
+      <PhaseHeader
+        title={`Installing voice on ${agentId}`}
+        description={phoneNumber ? `Target number ${phoneNumber}` : undefined}
+      />
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+      <Card className="p-4">
         <div className="flex items-center gap-3">
           <span className="inline-flex h-4 w-4 items-center justify-center">
             {status === "succeeded" ? (
@@ -83,11 +76,11 @@ export function InstallVoicePhase({
           </Chip>
         </div>
         {operation.error && status === "failed" && (
-          <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-300">
+          <p className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-300">
             {operation.error.code}: {operation.error.message}
           </p>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -105,33 +98,32 @@ export function VoiceDonePhase({
   onReset: () => void;
 }) {
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
-      <div className="text-3xl">📞</div>
+    <Card className="space-y-5 p-6 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-2xl shadow-lg shadow-emerald-600/30">
+        📞
+      </div>
       <div>
-        <p className="text-base font-bold text-white">
-          "{agentId}" answers calls
+        <p className="text-lg font-bold tracking-tight text-white">
+          {agentId} answers calls
         </p>
         {phoneNumber && (
-          <p className="mt-1 font-mono text-sm text-violet-300">
-            {phoneNumber}
-          </p>
+          <p className="mt-1 font-mono text-base text-violet-300">{phoneNumber}</p>
         )}
         <p className="mt-2 text-xs text-gray-500">
-          Dial that number — the new sub-agent picks up.
+          Dial that number and the new sub-agent picks up.
         </p>
         {wixInstalled && (
-          <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-            ✓ Wix Bookings installed — the agent can answer service/price
-            questions and book real appointments
+          <p className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-1.5 text-xs font-medium text-emerald-300">
+            ✓ Wix Bookings installed: it can answer service and price questions
+            and book real appointments
           </p>
         )}
       </div>
-      <button
-        onClick={onReset}
-        className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-gray-300 hover:bg-white/5"
-      >
-        Deploy another
-      </button>
-    </div>
+      <div className="pt-1">
+        <Button size="sm" variant="secondary" onClick={onReset}>
+          Deploy another
+        </Button>
+      </div>
+    </Card>
   );
 }

@@ -398,3 +398,122 @@ export async function getAgent(
   );
   return envelope.data.agent;
 }
+
+// ─── Agent workspace files (read + async write) ───────────────────────
+//
+// GET  /v1/.../files/:path        → current content + sha256 (mirror, ≤5min lag)
+// PUT  /v1/.../files/:path        → 202 + Location:/v1/operations/:opId (async)
+//
+// The write requires `files:write` scope on the API key. The PUT body
+// carries `expectedSha256` for optimistic concurrency: it must equal the
+// CURRENT mirror sha, OR sha256("") when the file doesn't exist yet. The
+// seeding flow reads the file first to learn its sha (the blueprint deploy
+// has already written a templated SOUL.md/AGENTS.md/etc), then overwrites
+// it with the richer AI-generated content. The fleet-agent backs up the
+// prior content (.bak.<ms>) before writing, so an overwrite is recoverable.
+
+/** sha256 of the empty string — the sentinel for "create a file that does
+ *  not exist yet". Must match functions/.../file-actions-service.ts. */
+export const EMPTY_SHA256 =
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+export interface AgentFileContent {
+  path: string;
+  content: string;
+  sha256: string;
+  writable: boolean;
+}
+
+/**
+ * Read one workspace file. Returns null on 404 (file not mirrored yet /
+ * does not exist) so the caller can fall back to EMPTY_SHA256 for a
+ * create. Any other API error propagates.
+ */
+export async function getAgentFile(
+  deploymentId: string,
+  agentId: string,
+  filePath: string,
+): Promise<AgentFileContent | null> {
+  try {
+    const { envelope } = await callApi<RequestEnvelope<AgentFileContent>>(
+      `/v1/deployments/${encodeURIComponent(deploymentId)}/agents/${encodeURIComponent(agentId)}/files/${encodeFilePath(filePath)}`,
+    );
+    return envelope.data;
+  } catch (err) {
+    if (err instanceof MbnApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export interface PutAgentFileInput {
+  deploymentId: string;
+  agentId: string;
+  filePath: string;
+  content: string;
+  /** Current mirror sha, or EMPTY_SHA256 to create. */
+  expectedSha256: string;
+  /** Deterministic per logical write so a retry is replay-safe. */
+  idempotencyKey: string;
+}
+
+/**
+ * Overwrite (or create) one workspace file. Async: returns the opId of the
+ * operation to poll via getOperation(). The API serializes file actions
+ * per deployment (409 resource-in-flight if another write is mid-apply),
+ * so the seeding orchestration writes files ONE AT A TIME, polling each to
+ * terminal before starting the next.
+ */
+export async function putAgentFile(
+  input: PutAgentFileInput,
+): Promise<{ opId: string }> {
+  const { response } = await callApi<unknown>(
+    `/v1/deployments/${encodeURIComponent(input.deploymentId)}/agents/${encodeURIComponent(input.agentId)}/files/${encodeFilePath(input.filePath)}`,
+    {
+      method: "PUT",
+      idempotencyKey: input.idempotencyKey,
+      body: JSON.stringify({
+        content: input.content,
+        expectedSha256: input.expectedSha256,
+      }),
+    },
+  );
+  if (response.status !== 202) {
+    throw new MbnApiError(
+      response.status,
+      "unexpected-status",
+      `Expected 202 Accepted on file write; got ${response.status}`,
+    );
+  }
+  const location = response.headers.get("Location");
+  if (!location) {
+    throw new MbnApiError(
+      502,
+      "missing-location",
+      "API did not return a Location header for the file-write operation",
+    );
+  }
+  const opId = location.split("/").pop();
+  if (!opId) {
+    throw new MbnApiError(
+      502,
+      "invalid-location",
+      `Location header has no opId: ${location}`,
+    );
+  }
+  return { opId };
+}
+
+/**
+ * Encode a workspace-relative file path for the URL. The path may contain
+ * slashes (e.g. `protocols/dojo-voice-agent-playbook.md`) that are
+ * meaningful route separators on the `:filePath{.+}` wildcard, so encode
+ * each SEGMENT but keep the slashes literal. Spaces / unicode etc. in a
+ * segment get percent-encoded; the API's own validator re-checks the
+ * decoded path.
+ */
+function encodeFilePath(filePath: string): string {
+  return filePath
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+}

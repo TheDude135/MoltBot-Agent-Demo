@@ -8,8 +8,17 @@ body {
 }
 
 body {
-  background: #0b0a14;
+  /* Deep near-black base with two soft violet glows for depth. The glows are
+     fixed so they don't scroll, and sit behind all content. */
+  background-color: #09080f;
+  background-image:
+    radial-gradient(60rem 40rem at 50% -10%, rgba(124, 58, 237, 0.18), transparent 60%),
+    radial-gradient(40rem 30rem at 110% 10%, rgba(139, 92, 246, 0.1), transparent 55%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   font-family:
     "Inter",
     ui-sans-serif,
@@ -17,4 +26,27 @@ body {
     -apple-system,
     "Segoe UI",
     sans-serif;
+}
+
+/* Quiet, on-brand scrollbar so the dark theme stays seamless. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 130, 200, 0.25) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 130, 200, 0.22);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 130, 200, 0.38);
+}
+
+/* Native select option list: keep it dark to match the inputs. */
+select option {
+  background-color: #16131f;
+  color: #e2e8f0;
 }

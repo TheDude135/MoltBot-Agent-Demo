@@ -25,6 +25,11 @@ import { isValidAgentId } from "@/lib/ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// This route polls the create operation server-side for up to 3 minutes
+// before returning. Raise the platform function cap so a slow cold-start
+// agent-create isn't killed mid-poll on serverless hosts (no-op on
+// `next dev`/`next start`, which have no cap).
+export const maxDuration = 300;
 
 const ProvisionInputSchema = z.object({
   deploymentId: z.string().min(1).max(100),

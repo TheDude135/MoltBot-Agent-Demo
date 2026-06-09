@@ -24,6 +24,16 @@ interface AppConfig {
    * voice + Wix flow is invoked.
    */
   ttmaApiKey: string;
+  /**
+   * Anthropic key for the OPTIONAL AI file-seeding pass. Empty string when
+   * unset — seeding is then skipped and the blueprint's templated files
+   * stand (no behavioral change vs. before AI seeding existed). This key
+   * never crosses into the Ninja/TTMA silos; it only talks to
+   * api.anthropic.com.
+   */
+  anthropicApiKey: string;
+  /** Model for the seeding pass. Overridable; defaults to Sonnet 4.6. */
+  anthropicModel: string;
 }
 
 let cached: AppConfig | null = null;
@@ -74,6 +84,20 @@ export function getConfig(): AppConfig {
     throw new Error(`TTMA_API_BASE is not a valid URL: ${ttmaApiBase}`);
   }
 
-  cached = { ninjaApiKey, ttmaApiKey, apiBase, ttmaApiBase };
+  // Anthropic key is optional. When absent the seeding pass is skipped —
+  // no format assertion, no throw. We don't assume a fixed prefix because
+  // Anthropic key formats can change; presence is the only gate.
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY?.trim() || "";
+  const anthropicModel =
+    process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-6";
+
+  cached = {
+    ninjaApiKey,
+    ttmaApiKey,
+    apiBase,
+    ttmaApiBase,
+    anthropicApiKey,
+    anthropicModel,
+  };
   return cached;
 }

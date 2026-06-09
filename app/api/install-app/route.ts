@@ -9,7 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { installApp, listApps, TtmaApiError } from "@/lib/ttma-client";
+import { ensureApp, listApps, TtmaApiError } from "@/lib/ttma-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,10 +64,14 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  // ── Install the app (POST /apps) ───────────────────────────────────
+  // ── Install (or reconfigure) the app ───────────────────────────────
+  // ensureApp = install; if an app for this slug already exists on this number
+  // with a DIFFERENT config (the number was reused for a different business),
+  // reconfigure it to the requested site instead of failing with
+  // app-config-conflict. A fresh deploy on a reused number "just works".
   let app;
   try {
-    app = await installApp({
+    app = await ensureApp({
       voiceDeploymentId: input.voiceDeploymentId,
       slug: input.slug,
       config: input.config,

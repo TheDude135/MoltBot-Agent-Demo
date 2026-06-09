@@ -11,6 +11,28 @@ import "server-only";
 
 // ─── Public types ─────────────────────────────────────────────────────
 
+/**
+ * Structured, AI-consumable view of the site. Distinct from `variables`
+ * (which is flattened strings for the blueprint deploy): this preserves the
+ * per-service detail an AI seeding pass needs to write a tailored playbook.
+ * Everything here is derived from PUBLIC, anonymous Wix endpoints — no
+ * customer PII. The seeding module treats every string field as UNTRUSTED
+ * site-controlled input (prompt-injection surface) and wraps it accordingly.
+ */
+export interface SiteContext {
+  businessName: string;
+  canonicalUrl: string;
+  services: Array<{
+    name: string;
+    price: string;
+    durationMinutes: number | null;
+    description: string | null;
+  }>;
+  staff: string[];
+  staffLabelSingular: string;
+  staffLabelPlural: string;
+}
+
 export interface IntrospectionResult {
   ok: true;
   canonicalUrl: string;
@@ -20,6 +42,9 @@ export interface IntrospectionResult {
   /** Pre-fillable values for the blueprint's variables. Caller overlays
    *  these on top of whatever defaults the blueprint already provided. */
   variables: Record<string, string>;
+  /** Structured detail for the optional AI seeding pass. Always present on
+   *  success; the seeder falls back to `variables` if AI is unavailable. */
+  siteContext: SiteContext;
 }
 
 export interface IntrospectionFailure {
@@ -215,9 +240,11 @@ async function fetchBusinessName(origin: string): Promise<string> {
       signal: ctrl.signal,
     });
     if (!res.ok) return originHostname(origin);
-    // Slurp up to 128KB (Wix's <head> is large with many scripts/meta).
-    // Using res.text() is simpler than streaming and handles content-encoding.
-    const buf = (await res.text()).slice(0, 128_000);
+    // Slurp up to 4 MB. Wix homepages can be very large (Plock Tennis Club:
+    // 1.3 MB with og:site_name at byte 234,644). The old 128 KB cap missed
+    // meta tags on rich Wix sites and fell back to the hostname. Bound is
+    // defensive against pathological responses; regex scan stays fast.
+    const buf = (await res.text()).slice(0, 4_000_000);
 
     // Prefer og:site_name (cleaner than <title>, which often includes "Home | ...")
     const siteName = matchMetaContent(buf, "og:site_name");
@@ -289,6 +316,8 @@ function decodeHtmlEntities(s: string): string {
 interface WixService {
   id: string;
   name: string;
+  description?: string;
+  tagLine?: string;
   payment: {
     rateType: "FIXED" | "CUSTOM" | "NO_FEE" | "VARIED_BY_STAFF_MEMBER";
     fixed?: { price?: { value: string; currency: string } };
@@ -300,6 +329,39 @@ interface WixService {
   staffMemberIds?: string[];
   hidden?: boolean;
   onlineBooking?: { enabled?: boolean };
+}
+
+/** First session duration (minutes) if the service exposes one. */
+function serviceDurationMinutes(s: WixService): number | null {
+  const d = s.schedule?.availabilityConstraints?.sessionDurations;
+  if (Array.isArray(d) && d.length > 0 && Number.isFinite(d[0])) return d[0]!;
+  return null;
+}
+
+/** A short, plain-text service description if present. Wix exposes either a
+ *  `description` (rich) or a `tagLine` (one-liner). We strip HTML and clamp
+ *  length so a hostile site can't bloat the AI prompt. */
+function serviceDescription(s: WixService): string | null {
+  const raw = (s.description ?? s.tagLine ?? "").trim();
+  if (!raw) return null;
+  const text = raw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  return text.length > 280 ? text.slice(0, 277) + "…" : text;
+}
+
+/** The structured, per-service detail the AI seeder consumes. Visible
+ *  services only (hidden / online-booking-disabled excluded), capped at
+ *  MAX_SERVICES_IN_TABLE so the prompt stays bounded. */
+function buildServiceDetail(services: WixService[]): SiteContext["services"] {
+  return services
+    .filter((s) => !s.hidden && s.onlineBooking?.enabled !== false)
+    .slice(0, MAX_SERVICES_IN_TABLE)
+    .map((s) => ({
+      name: s.name,
+      price: formatPrice(s),
+      durationMinutes: serviceDurationMinutes(s),
+      description: serviceDescription(s),
+    }));
 }
 
 async function fetchServices(origin: string, instanceToken: string): Promise<WixService[]> {
@@ -563,6 +625,7 @@ export async function introspectSite(
   // Step 5: build the markdown blobs + staff labels
   const servicesTableMd = buildServicesTable(services);
   const { rosterMd: staffRosterMd, labelSingular, labelPlural } = buildStaffRoster(staffNames);
+  const serviceDetail = buildServiceDetail(services);
 
   return {
     ok: true,
@@ -570,6 +633,14 @@ export async function introspectSite(
     businessName,
     serviceCount: services.filter((s) => !s.hidden && s.onlineBooking?.enabled !== false).length,
     staffCount: staffNames.length,
+    siteContext: {
+      businessName,
+      canonicalUrl: origin,
+      services: serviceDetail,
+      staff: staffNames,
+      staffLabelSingular: labelSingular,
+      staffLabelPlural: labelPlural,
+    },
     variables: {
       business_name: businessName,
       services_table_md: servicesTableMd,

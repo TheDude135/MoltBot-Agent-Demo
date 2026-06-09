@@ -14,6 +14,13 @@ export type VariableType =
   | "select"
   | "boolean";
 
+// The agent's emoji has a single source of truth: the identity picker shown
+// in the Configure phase. Blueprints also expose it as a variable (used in
+// their persona/SOUL files); when present, that variable is driven from the
+// picker and hidden from the variable list so there is never a second emoji
+// control that can diverge from the identity icon shown in the Ninja UI.
+export const EMOJI_VARIABLE_KEY = "agent_emoji";
+
 export interface BlueprintVariable {
   key: string;
   label: string;
