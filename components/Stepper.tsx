@@ -4,6 +4,8 @@
 
 "use client";
 
+import { Check } from "@phosphor-icons/react";
+
 export const STEPS = ["Blueprint", "Site", "Configure", "Deploy", "Voice"] as const;
 
 export function Stepper({ current }: { current: number }) {
@@ -23,7 +25,7 @@ export function Stepper({ current }: { current: number }) {
                       : "bg-white/[0.04] text-gray-600 ring-1 ring-white/10"
                 }`}
               >
-                {state === "done" ? "✓" : i + 1}
+                {state === "done" ? <Check size={13} weight="bold" /> : i + 1}
               </span>
               <span
                 className={`hidden text-xs font-medium transition-colors sm:inline ${

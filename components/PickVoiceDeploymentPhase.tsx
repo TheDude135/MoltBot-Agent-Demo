@@ -6,6 +6,7 @@
 "use client";
 
 import type { VoiceDeployment } from "@/lib/types";
+import { Phone } from "@phosphor-icons/react";
 import { Button, Card, CenteredStatus, Chip, PhaseHeader, Section } from "./atoms";
 
 export function PickVoiceDeploymentPhase({
@@ -125,9 +126,20 @@ export function PickVoiceDeploymentPhase({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-mono text-sm font-bold text-white">
-                      {vd.phoneNumber}
-                    </p>
+                    {vd.name ? (
+                      <>
+                        <p className="text-sm font-bold text-white">
+                          {vd.name}
+                        </p>
+                        <p className="mt-0.5 font-mono text-xs text-violet-200">
+                          {vd.phoneNumber}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-mono text-sm font-bold text-white">
+                        {vd.phoneNumber}
+                      </p>
+                    )}
                     <p className="mt-0.5 font-mono text-[10px] text-gray-500">
                       {vd.id}
                     </p>
@@ -154,8 +166,8 @@ export function PickVoiceDeploymentPhase({
       <Section title="Rebinding note">
         <p className="text-xs text-gray-500">
           If the selected number is already bound to another sub-agent, the
-          install will <span className="text-violet-300">rotate that gateway's secret</span>{" "}
-          and rebind to "{agentId}". Use this flow on a number you intend to
+          install will <span className="text-violet-300">rotate that gateway&apos;s secret</span>{" "}
+          and rebind to &quot;{agentId}&quot;. Use this flow on a number you intend to
           re-route. Otherwise pick another deployment or provision a fresh one
           at app.talktomyagent.io.
         </p>
@@ -169,7 +181,7 @@ export function PickVoiceDeploymentPhase({
           size="sm"
           onClick={onSubmit}
           disabled={!canSubmit}
-          leadingIcon={<span>📞</span>}
+          leadingIcon={<Phone size={15} weight="fill" />}
           className="ml-auto"
         >
           Install voice

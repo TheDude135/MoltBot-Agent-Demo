@@ -6,6 +6,7 @@
 
 import type { Blueprint, BlueprintVariable, Deployment } from "@/lib/types";
 import { EMOJI_VARIABLE_KEY } from "@/lib/types";
+import { CheckCircle } from "@phosphor-icons/react";
 import { Button, Label, PhaseHeader, Section } from "./atoms";
 
 const EMOJI_OPTIONS = ["🤖", "🧠", "💼", "📞", "🎯", "⭐", "🔥", "💡", "🚀", "🛠️", "📊", "🎨"];
@@ -55,8 +56,9 @@ export function ConfigurePhase(props: {
 
       {props.introspectSummary && (
         <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-3">
-          <p className="text-xs font-semibold text-emerald-300">
-            ✓ Pre-filled from {props.introspectSummary.businessName}
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+            <CheckCircle size={14} weight="fill" /> Pre-filled from{" "}
+            {props.introspectSummary.businessName}
           </p>
           <p className="mt-0.5 text-[10px] text-emerald-200/70">
             Read {props.introspectSummary.serviceCount} services and{" "}

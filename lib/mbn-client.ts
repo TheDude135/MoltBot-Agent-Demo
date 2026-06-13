@@ -81,11 +81,10 @@ async function callApi<T>(
         `Upstream request timed out after ${timeoutMs}ms`,
       );
     }
-    throw new MbnApiError(
-      502,
-      "bad-gateway",
-      `Upstream request failed: ${(err as Error).message}`,
-    );
+    // Log the real cause server-side; return a generic message so we never
+    // leak internal connection detail / hostnames to the browser.
+    console.error(`[mbn-client] ${method} ${pathAndQuery} network failure:`, err);
+    throw new MbnApiError(502, "bad-gateway", "Upstream request failed.");
   } finally {
     clearTimeout(timer);
   }

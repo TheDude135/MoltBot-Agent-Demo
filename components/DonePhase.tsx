@@ -5,6 +5,15 @@
 
 import type { BlueprintDeployRecord } from "@/lib/types";
 import { formatStepName } from "@/lib/format";
+import {
+  CheckCircle,
+  Confetti,
+  Phone,
+  Sparkle,
+  Warning,
+  WarningCircle,
+  XCircle,
+} from "@phosphor-icons/react";
 import { Button, Card } from "./atoms";
 
 /** Seeding outcome surfaced under the done state. `null` = not applicable
@@ -42,9 +51,15 @@ export function DonePhase({
   return (
     <Card className="space-y-5 p-6 text-center">
       <div
-        className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br text-2xl shadow-lg ${ring}`}
+        className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br shadow-lg ${ring}`}
       >
-        {status === "complete" ? "🎉" : status === "partial" ? "⚠️" : "❌"}
+        {status === "complete" ? (
+          <Confetti size={28} weight="fill" className="text-white" />
+        ) : status === "partial" ? (
+          <Warning size={28} weight="fill" className="text-white" />
+        ) : (
+          <XCircle size={28} weight="fill" className="text-white" />
+        )}
       </div>
       <div>
         <p className="text-lg font-bold tracking-tight text-white">
@@ -56,7 +71,7 @@ export function DonePhase({
         </p>
         <p className="mt-1 text-xs text-gray-500">
           {status === "complete"
-            ? "Your sub-agent is deployed and ready."
+            ? "Your sub-agent is deployed and ready. Give it a phone number to take calls."
             : "See the details below."}
         </p>
       </div>
@@ -65,8 +80,8 @@ export function DonePhase({
         <div className="space-y-1 rounded-xl border border-rose-500/20 bg-rose-500/[0.06] p-3 text-left">
           <p className="text-xs font-semibold text-rose-300">Failed steps</p>
           {failedSteps.map((s) => (
-            <p key={s} className="font-mono text-[11px] text-rose-300/80">
-              ✕ {formatStepName(s)}
+            <p key={s} className="flex items-center gap-1.5 font-mono text-[11px] text-rose-300/80">
+              <XCircle size={12} weight="fill" /> {formatStepName(s)}
             </p>
           ))}
         </div>
@@ -76,7 +91,7 @@ export function DonePhase({
 
       <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
         {onAttachVoice && (
-          <Button size="sm" onClick={onAttachVoice} leadingIcon={<span>📞</span>}>
+          <Button size="sm" onClick={onAttachVoice} leadingIcon={<Phone size={15} weight="fill" />}>
             Add a phone number
           </Button>
         )}
@@ -97,17 +112,21 @@ function SeedNoteCard({ note }: { note: SeedNote }) {
         : "border-white/10 bg-white/[0.03]";
   const title =
     note.status === "running"
-      ? "✍️ Tailoring the agent to the site…"
+      ? "Tailoring the agent's persona to the site…"
       : note.status === "seeded"
-        ? "✍️ Persona tailored to the site"
+        ? "AI rewrote the agent's persona"
         : note.status === "skipped"
-          ? "✍️ Using the blueprint's templated files"
-          : "✍️ Seeding skipped";
+          ? "Using the blueprint's default persona"
+          : "Persona tailoring skipped";
   return (
     <div className={`rounded-xl border p-3 text-left text-[11px] ${tone}`}>
       <p className="flex items-center gap-2 font-semibold text-gray-200">
-        {note.status === "running" && (
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+        {note.status === "running" ? (
+          <Sparkle size={14} weight="fill" className="animate-pulse text-violet-300" />
+        ) : note.status === "seeded" ? (
+          <Sparkle size={14} weight="fill" className="text-emerald-300" />
+        ) : (
+          <WarningCircle size={14} weight="fill" className="text-amber-300" />
         )}
         {title}
       </p>
@@ -126,8 +145,8 @@ export function ErrorPhase({
   return (
     <Card className="space-y-3 border-rose-500/30 bg-rose-500/[0.08] p-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/15 text-lg">
-          ⚠️
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/15">
+          <Warning size={20} weight="fill" className="text-rose-300" />
         </div>
         <p className="text-base font-bold text-rose-200">Something went wrong</p>
       </div>

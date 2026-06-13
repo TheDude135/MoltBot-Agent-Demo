@@ -4,8 +4,18 @@
 
 /**
  * Derives a kebab-case agentId from a free-form name.
- * Must match `/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/` and be 1-32 chars.
- * Returns "" if no characters survived; the caller treats that as invalid.
+ *
+ * Must satisfy the STRICTEST rule in the deploy->voice pipeline: the voice
+ * install step requires `^[a-z]([a-z0-9-]*[a-z0-9])?$` (start with a LETTER,
+ * end alphanumeric, single hyphens, 1-32 chars). This is stricter than the
+ * agent-create endpoint, which also accepts a leading digit. If we generated a
+ * digit-leading id (e.g. "25-affordable-markham-notary" from "25 Affordable
+ * Markham Notary"), the agent would deploy fine but then FAIL at "Install
+ * voice" with a 400. So we drop any leading digits/hyphens to guarantee a
+ * letter-leading id that works end to end.
+ *
+ * Returns "" if no valid characters survive (e.g. an all-digits name); the
+ * caller treats that as invalid and asks the user to pick a different name.
  */
 export function generateAgentId(name: string): string {
   return name
@@ -13,7 +23,8 @@ export function generateAgentId(name: string): string {
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replace(/^[^a-z]+/, "") // must START with a letter (drop leading digits/hyphens)
+    .replace(/-+$/g, "")
     .slice(0, 32)
     .replace(/-+$/g, "");
 }
@@ -38,5 +49,9 @@ export function generateRequestId(): string {
 }
 
 export function isValidAgentId(value: string): boolean {
-  return /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(value);
+  // Mirror the strictest gate in the pipeline (the voice install step): start
+  // with a LETTER, end alphanumeric, single hyphens, 1-32 chars. Keeping this
+  // in lockstep with generateAgentId means a name the UI accepts always
+  // produces an id that survives both deploy AND voice install.
+  return /^[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(value);
 }

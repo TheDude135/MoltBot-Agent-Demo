@@ -37,12 +37,12 @@ import { generateAgentId, generateRequestId, isValidAgentId } from "@/lib/ids";
 import { CatalogPhase } from "@/components/CatalogPhase";
 import { UrlPhase } from "@/components/UrlPhase";
 import { ConfigurePhase } from "@/components/ConfigurePhase";
-import { ProgressPhase } from "@/components/ProgressPhase";
 import { DonePhase, ErrorPhase, type SeedNote } from "@/components/DonePhase";
 import { PickVoiceDeploymentPhase } from "@/components/PickVoiceDeploymentPhase";
-import { InstallVoicePhase, VoiceDonePhase } from "@/components/InstallVoicePhase";
-import { CenteredStatus } from "@/components/atoms";
+import { VoiceTimeline, VoiceDonePhase } from "@/components/InstallVoicePhase";
 import { Stepper } from "@/components/Stepper";
+import { SetupTimeline } from "@/components/SetupTimeline";
+import { Robot } from "@phosphor-icons/react";
 
 type Phase =
   | "catalog"
@@ -691,23 +691,20 @@ export default function Page() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-      <header className="mb-6 flex items-center justify-between gap-3">
+      <header className="mb-6 flex items-center gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 text-lg shadow-lg shadow-violet-700/30">
-            🪄
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 shadow-lg shadow-violet-700/30">
+            <Robot size={24} weight="duotone" className="text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight text-white">
               Agent Deploy
             </h1>
             <p className="text-xs text-gray-500">
-              Provision a voice agent from a blueprint
+              Clone a blueprint and deploy a live AI agent in minutes.
             </p>
           </div>
         </div>
-        <span className="hidden rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] font-medium text-gray-400 sm:inline">
-          Public REST API · no SDK
-        </span>
       </header>
 
       {phase !== "error" && (
@@ -770,16 +767,20 @@ export default function Page() {
       )}
 
       {phase === "provisioning" && (
-        <CenteredStatus
-          label="Creating your agent"
-          detail="Provisioning a new sub-agent on your deployment. This usually takes 30 to 60 seconds."
+        <SetupTimeline
+          phase="provisioning"
+          deployRecord={deployRecord}
+          seedNote={seedNote}
+          agentId={provisionContext?.agentId ?? generatedAgentId ?? "your agent"}
         />
       )}
 
       {phase === "progress" && (
-        <ProgressPhase
+        <SetupTimeline
+          phase="progress"
           deployRecord={deployRecord}
-          agentId={provisionContext?.agentId ?? "(unknown)"}
+          seedNote={seedNote}
+          agentId={provisionContext?.agentId ?? generatedAgentId ?? "(unknown)"}
         />
       )}
 
@@ -811,14 +812,17 @@ export default function Page() {
       )}
 
       {phase === "installing-app" && (
-        <CenteredStatus
-          label="Installing Wix Bookings"
-          detail="Registering the booking app on your voice number so the agent can answer service and price questions and book real appointments from the first call."
+        <VoiceTimeline
+          stage="app"
+          phoneNumber={voiceInstallContext?.phoneNumber ?? null}
+          agentId={provisionContext?.agentId ?? "(unknown)"}
+          operation={null}
         />
       )}
 
       {phase === "installing-voice" && (
-        <InstallVoicePhase
+        <VoiceTimeline
+          stage="gateway"
           phoneNumber={voiceInstallContext?.phoneNumber ?? null}
           agentId={provisionContext?.agentId ?? "(unknown)"}
           operation={voiceOperation}

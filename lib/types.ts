@@ -96,6 +96,9 @@ export interface BlueprintDeployRecord {
 /** A voice deployment owned by the customer — Telnyx phone + TTMA voice gateway. */
 export interface VoiceDeployment {
   id: string;
+  /** Friendly deployment name (the bot's display name). Null on legacy
+   *  deployments that never had one set. */
+  name: string | null;
   phoneNumber: string | null;
   lifecycleStatus: string | null;
   agentId: string | null;

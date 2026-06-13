@@ -79,11 +79,10 @@ async function callTtma<T>(
         `TTMA request timed out after ${timeoutMs}ms`,
       );
     }
-    throw new TtmaApiError(
-      502,
-      "bad-gateway",
-      `TTMA request failed: ${(err as Error).message}`,
-    );
+    // Log the real cause server-side; return a generic message so we never
+    // leak internal connection detail / hostnames to the browser.
+    console.error("[ttma-client] network failure:", err);
+    throw new TtmaApiError(502, "bad-gateway", "Upstream request failed.");
   } finally {
     clearTimeout(timer);
   }

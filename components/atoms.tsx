@@ -5,6 +5,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { CaretLeft, LockSimple } from "@phosphor-icons/react";
 
 // ─── Layout ───────────────────────────────────────────────────────────
 
@@ -63,9 +64,9 @@ export function PhaseHeader({
       {onBack && (
         <button
           onClick={onBack}
-          className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
         >
-          ← Back
+          <CaretLeft size={13} weight="bold" /> Back
         </button>
       )}
     </header>
@@ -87,7 +88,7 @@ export function Label({
     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-300">
       {children}
       {required && <span className="text-[10px] text-rose-400">*</span>}
-      {secret && <span className="text-[10px] text-gray-500">🔒</span>}
+      {secret && <LockSimple size={11} className="text-gray-500" />}
     </label>
   );
 }

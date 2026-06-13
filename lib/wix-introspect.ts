@@ -8,6 +8,7 @@
 // of this file; Ninja never needs to know what they're calling.
 
 import "server-only";
+import { lookup } from "node:dns/promises";
 
 // ─── Public types ─────────────────────────────────────────────────────
 
@@ -103,14 +104,80 @@ export function normalizeUrl(raw: string): string {
     throw new Error("URL is malformed");
   }
 
-  // Reject obviously-non-domains (no dot, IP-like, ...localhost). The
-  // demo's introspection only makes sense for public Wix sites.
-  if (!url.hostname.includes(".") || url.hostname === "localhost") {
+  // Reject obviously-non-domains (no dot, ...localhost). A real Wix site is
+  // always a registrable domain, never a bare IP, so reject IP literals up
+  // front (this is the first half of the SSRF guard — see assertPublicHost
+  // for the DNS-resolution half).
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    !url.hostname.includes(".") ||
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    isIpLiteral(host)
+  ) {
     throw new Error("URL is not a public domain");
   }
 
   // Strip path/query/hash — Wix endpoints live at the origin.
-  return `https://${url.hostname.toLowerCase()}`;
+  return `https://${host}`;
+}
+
+// ─── SSRF guard ───────────────────────────────────────────────────────
+//
+// introspection fetches a user-supplied host server-side, so without a guard
+// a caller could point it at cloud metadata (169.254.169.254), loopback, or
+// internal RFC-1918 addresses. Two layers: normalizeUrl rejects IP-literal
+// hosts synchronously; assertPublicHost resolves the hostname via DNS and
+// rejects any answer in a private/reserved range (defeats a public name that
+// resolves to an internal IP). NOTE for adopters: a fully hardened version
+// would also re-validate every redirect hop (set redirect:"manual"); the Wix
+// JSON endpoints used here don't redirect, so we keep the simpler form.
+
+/** True if `host` is a literal IPv4 or IPv6 address (not a domain name). */
+function isIpLiteral(host: string): boolean {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // dotted-quad IPv4
+  if (host.includes(":")) return true; // IPv6 (brackets already stripped)
+  return false;
+}
+
+/** True if an IP string falls in a private, loopback, link-local, or
+ *  otherwise non-public range (IPv4 + the common IPv6 cases). */
+function isPrivateAddress(ip: string): boolean {
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1) — test the embedded v4.
+  const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+  if (mapped && mapped[1]) return isPrivateAddress(mapped[1]);
+
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    const parts = ip.split(".").map(Number);
+    const a = parts[0] ?? 0;
+    const b = parts[1] ?? 0;
+    if (a === 10 || a === 127 || a === 0) return true; // private / loopback / "this host"
+    if (a === 169 && b === 254) return true; // link-local incl. cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true; // private
+    if (a === 192 && b === 168) return true; // private
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    if (a >= 224) return true; // multicast / reserved
+    return false;
+  }
+
+  // IPv6
+  const v6 = ip.toLowerCase();
+  if (v6 === "::1" || v6 === "::") return true; // loopback / unspecified
+  if (v6.startsWith("ff")) return true; // multicast (ff00::/8)
+  if (/^fe[89ab]/.test(v6)) return true; // link-local fe80::/10
+  if (v6.startsWith("fc") || v6.startsWith("fd")) return true; // unique-local (ULA)
+  return false;
+}
+
+/** Resolve `origin`'s hostname and throw if it points anywhere non-public.
+ *  Callers treat a throw as "skip this origin" so it never gets fetched. */
+async function assertPublicHost(origin: string): Promise<void> {
+  const host = new URL(origin).hostname.replace(/^\[|\]$/g, "");
+  const answers = await lookup(host, { all: true });
+  if (answers.length === 0 || answers.some((a) => isPrivateAddress(a.address))) {
+    throw new Error("host resolves to a non-public address");
+  }
 }
 
 /**
@@ -182,6 +249,15 @@ async function detectWixBookings(originGuess: string): Promise<DetectionSuccess 
   // failure that's still informative ("this isn't Wix" > "couldn't reach").
   let bestFailure: AccessTokensProbe = { kind: "network-failure" };
   for (const origin of [originGuess, withWwwToggled(originGuess)]) {
+    // SSRF guard: never fetch an origin whose host resolves to a private/
+    // reserved address. A throw means "skip" — the origin is treated as
+    // unreachable, never probed. All downstream fetches reuse the origin
+    // returned from here, so validating it once covers the whole flow.
+    try {
+      await assertPublicHost(origin);
+    } catch {
+      continue;
+    }
     const probe = await probeAccessTokens(origin);
     if (probe.kind === "wix-found") {
       const bookings = probe.body.apps?.[WIX_BOOKINGS_APP_ID];

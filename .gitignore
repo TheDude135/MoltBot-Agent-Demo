@@ -5,7 +5,7 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
-# Environment — secrets, never commit
+# Environment - secrets, never commit
 .env
 .env.local
 .env*.local
@@ -13,9 +13,11 @@ next-env.d.ts
 .env.local.*
 .env.*.backup
 
-# Logs
+# Logs + scratch
 *.log
 npm-debug.log*
+.tmp_devlog
+*.tmp
 
 # OS
 .DS_Store

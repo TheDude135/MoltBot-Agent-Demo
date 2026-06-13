@@ -34,9 +34,9 @@ const InstallVoiceInputSchema = z.object({
     .max(32)
     .refine(isValidAgentId, "agentId must be lowercase alnum + single hyphens"),
   voiceDeploymentId: z.string().min(1).max(128),
-  /** Override the "gateway already running" guard on the TTMA mint. The
-   *  demo defaults to `false`; the customer can opt in if they
-   *  understand they will invalidate any currently-installed gateway. */
+  /** Override the "gateway already running" guard on the TTMA mint. Optional
+   *  on the wire (absent == false); the demo's "Install Voice" button sends
+   *  `true` so it can reinstall over a running gateway. */
   forceReinstall: z.boolean().optional(),
   /** Per-attempt logical id from the client. Same id → same operation. */
   requestId: z
