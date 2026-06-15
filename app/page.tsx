@@ -42,7 +42,6 @@ import { PickVoiceDeploymentPhase } from "@/components/PickVoiceDeploymentPhase"
 import { VoiceTimeline, VoiceDonePhase } from "@/components/InstallVoicePhase";
 import { Stepper } from "@/components/Stepper";
 import { SetupTimeline } from "@/components/SetupTimeline";
-import { Robot } from "@phosphor-icons/react";
 
 type Phase =
   | "catalog"
@@ -92,6 +91,15 @@ const STEP_FOR_PHASE: Record<Phase, number> = {
   "voice-done": 4,
   error: 3,
 };
+
+// True when a blueprint's variables include the Wix-introspectable fields the
+// Site step fills (e.g. business_name / services). Site-less blueprints (the
+// Personal Assistant) skip the Site step and the AI persona seeding.
+function blueprintUsesSite(bp: Blueprint): boolean {
+  return bp.variables.some(
+    (v) => v.key === "services_table_md" || v.key === "business_name",
+  );
+}
 
 export default function Page() {
   const [phase, setPhase] = useState<Phase>("catalog");
@@ -206,8 +214,10 @@ export default function Page() {
     };
   }, []);
 
-  // Initialize variable defaults when a blueprint is selected, then route
-  // to the URL phase so introspection can pre-fill the form.
+  // Initialize variable defaults when a blueprint is selected, then route to
+  // the Site (url) phase ONLY for blueprints that carry Wix-introspectable
+  // variables. Any other blueprint (e.g. the Personal Assistant) has no site to
+  // read, so it goes straight to manual Configure.
   const handleSelectBlueprint = useCallback((bp: Blueprint) => {
     setSelectedBlueprint(bp);
     const defaults: Record<string, string> = {};
@@ -224,7 +234,7 @@ export default function Page() {
     setSiteUrl("");
     setIntrospectError(null);
     setIntrospectSummary(null);
-    setPhase("url");
+    setPhase(blueprintUsesSite(bp) ? "url" : "configure");
   }, []);
 
   // POST /api/introspect — on success overlay the returned variable values
@@ -694,14 +704,21 @@ export default function Page() {
       <header className="mb-6 flex items-center gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 shadow-lg shadow-violet-700/30">
-            <Robot size={24} weight="duotone" className="text-white" />
+            <span className="text-2xl leading-none" role="img" aria-label="Friendly robot">
+              🤖
+            </span>
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-white">
-              Agent Deploy
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold tracking-tight text-white">
+                Agent Deploy
+              </h1>
+              <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300">
+                Demo
+              </span>
+            </div>
             <p className="text-xs text-gray-500">
-              Clone a blueprint and deploy a live AI agent in minutes.
+              Using the MoltBot Ninja API to deploy a new AI agent from a blueprint.
             </p>
           </div>
         </div>
