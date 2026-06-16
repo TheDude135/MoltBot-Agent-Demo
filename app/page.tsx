@@ -76,20 +76,23 @@ const PROGRESS_POLL_INTERVAL_MS = 2000;
 const PROGRESS_POLL_TIMEOUT_MS = 5 * 60_000;
 const VOICE_POLL_TIMEOUT_MS = 5 * 60_000;
 
-// Which of the 5 stepper steps (Blueprint, Site, Configure, Deploy, Voice)
-// each phase belongs to. Drives the global progress indicator.
-const STEP_FOR_PHASE: Record<Phase, number> = {
-  catalog: 0,
-  url: 1,
-  configure: 2,
-  provisioning: 3,
-  progress: 3,
-  done: 3,
-  "pick-voice": 4,
-  "installing-app": 4,
-  "installing-voice": 4,
-  "voice-done": 4,
-  error: 3,
+// Stepper labels. Site-less blueprints (no Wix introspection) drop the "Site"
+// step entirely, so we map each phase to a LABEL and look up its index in the
+// active list — which works for both the 5-step (Wix) and 4-step (no-site) shapes.
+const STEPS_WITH_SITE = ["Blueprint", "Site", "Configure", "Deploy", "Voice"] as const;
+const STEPS_NO_SITE = ["Blueprint", "Configure", "Deploy", "Voice"] as const;
+const STEP_LABEL_FOR_PHASE: Record<Phase, string> = {
+  catalog: "Blueprint",
+  url: "Site",
+  configure: "Configure",
+  provisioning: "Deploy",
+  progress: "Deploy",
+  done: "Deploy",
+  "pick-voice": "Voice",
+  "installing-app": "Voice",
+  "installing-voice": "Voice",
+  "voice-done": "Voice",
+  error: "Deploy",
 };
 
 // True when a blueprint's variables include the Wix-introspectable fields the
@@ -297,6 +300,16 @@ export default function Page() {
     () => deployments.filter((d) => d.status === "OPERATIONAL"),
     [deployments],
   );
+
+  // Site-less blueprints (e.g. the Personal Assistant) skip the Wix Site step,
+  // so the stepper, the Configure back-button, and the deploy timeline all drop
+  // their site-specific pieces. Defaults to true before a blueprint is picked.
+  const usesSite = useMemo(
+    () => (selectedBlueprint ? blueprintUsesSite(selectedBlueprint) : true),
+    [selectedBlueprint],
+  );
+  const stepperSteps: readonly string[] = usesSite ? STEPS_WITH_SITE : STEPS_NO_SITE;
+  const stepperCurrent = Math.max(0, stepperSteps.indexOf(STEP_LABEL_FOR_PHASE[phase]));
 
   const canSubmit = Boolean(
     targetDeploymentId &&
@@ -726,7 +739,7 @@ export default function Page() {
 
       {phase !== "error" && (
         <div className="mb-8">
-          <Stepper current={STEP_FOR_PHASE[phase]} />
+          <Stepper steps={stepperSteps} current={stepperCurrent} />
         </div>
       )}
 
@@ -777,7 +790,12 @@ export default function Page() {
             setVariableValues((prev) => ({ ...prev, [key]: val }))
           }
           introspectSummary={introspectSummary}
-          onBack={() => setPhase("url")}
+          onBack={() => {
+            // Site-less blueprints never visited the Site step, so Back returns
+            // to the catalog (mirroring the Site phase's own back behavior).
+            if (usesSite) setPhase("url");
+            else { setPhase("catalog"); setSelectedBlueprint(null); }
+          }}
           onSubmit={submitProvision}
           canSubmit={canSubmit}
         />
@@ -788,6 +806,7 @@ export default function Page() {
           phase="provisioning"
           deployRecord={deployRecord}
           seedNote={seedNote}
+          usesSite={usesSite}
           agentId={provisionContext?.agentId ?? generatedAgentId ?? "your agent"}
         />
       )}
@@ -797,6 +816,7 @@ export default function Page() {
           phase="progress"
           deployRecord={deployRecord}
           seedNote={seedNote}
+          usesSite={usesSite}
           agentId={provisionContext?.agentId ?? generatedAgentId ?? "(unknown)"}
         />
       )}

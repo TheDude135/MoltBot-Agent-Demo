@@ -6,12 +6,19 @@
 
 import { Check } from "@phosphor-icons/react";
 
+// Default flow (Wix). Site-less blueprints pass a shorter list (no "Site").
 export const STEPS = ["Blueprint", "Site", "Configure", "Deploy", "Voice"] as const;
 
-export function Stepper({ current }: { current: number }) {
+export function Stepper({
+  current,
+  steps = STEPS,
+}: {
+  current: number;
+  steps?: readonly string[];
+}) {
   return (
     <ol className="flex items-center gap-1.5">
-      {STEPS.map((label, i) => {
+      {steps.map((label, i) => {
         const state = i < current ? "done" : i === current ? "active" : "todo";
         return (
           <li key={label} className="flex flex-1 items-center gap-1.5">
@@ -39,7 +46,7 @@ export function Stepper({ current }: { current: number }) {
                 {label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <span
                 className={`h-px flex-1 transition-colors ${
                   i < current ? "bg-violet-500/50" : "bg-white/10"

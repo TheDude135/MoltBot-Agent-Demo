@@ -34,11 +34,15 @@ export function SetupTimeline({
   deployRecord,
   seedNote,
   agentId,
+  usesSite = true,
 }: {
   phase: "provisioning" | "progress";
   deployRecord: BlueprintDeployRecord | null;
   seedNote: SeedNote | null;
   agentId: string;
+  /** Site-less blueprints (no Wix introspection) have no site to read, so the
+   *  AI persona-seeding step is omitted from the timeline. */
+  usesSite?: boolean;
 }) {
   // 1. Create the sub-agent. Done once a deploy record exists (the deploy can
   //    only run after the agent is created).
@@ -76,16 +80,22 @@ export function SetupTimeline({
       status: deployStatus,
       substeps: deployRecord ? buildSubsteps(deployRecord) : undefined,
     },
-    {
-      key: "seed",
-      title: "Tailor the persona to the site",
-      desc:
-        seedNote?.message ??
-        "Claude rewrites the agent's SOUL.md to match this business. Best-effort; skipped if no Anthropic key is set.",
-      method: "PUT",
-      path: "/v1/deployments/{id}/agents/{agentId}/files",
-      status: seedStatus,
-    },
+    // AI persona seeding reads the site to tailor SOUL.md — only meaningful for
+    // blueprints that have a site. Site-less ones keep their templated SOUL.md.
+    ...(usesSite
+      ? [
+          {
+            key: "seed",
+            title: "Tailor the persona to the site",
+            desc:
+              seedNote?.message ??
+              "Claude rewrites the agent's SOUL.md to match this business. Best-effort; skipped if no Anthropic key is set.",
+            method: "PUT",
+            path: "/v1/deployments/{id}/agents/{agentId}/files",
+            status: seedStatus,
+          } as TimelineStep,
+        ]
+      : []),
   ];
 
   // While the deploy is active, surface the live sub-step name as the
