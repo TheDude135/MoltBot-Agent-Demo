@@ -127,12 +127,19 @@ export function normalizeUrl(raw: string): string {
 //
 // introspection fetches a user-supplied host server-side, so without a guard
 // a caller could point it at cloud metadata (169.254.169.254), loopback, or
-// internal RFC-1918 addresses. Two layers: normalizeUrl rejects IP-literal
-// hosts synchronously; assertPublicHost resolves the hostname via DNS and
-// rejects any answer in a private/reserved range (defeats a public name that
-// resolves to an internal IP). NOTE for adopters: a fully hardened version
-// would also re-validate every redirect hop (set redirect:"manual"); the Wix
-// JSON endpoints used here don't redirect, so we keep the simpler form.
+// internal RFC-1918 addresses. Three layers:
+//   1. normalizeUrl rejects IP-literal hosts synchronously.
+//   2. assertPublicHost resolves the hostname via DNS and rejects any answer in
+//      a private/reserved range (defeats a public name that resolves internally).
+//   3. every outbound fetch sets `redirect: "manual"` so a validated public host
+//      cannot 3xx-redirect the request onto an internal address.
+//
+// RESIDUAL for adopters who expose this beyond a trusted operator: DNS rebinding
+// (the name re-resolves between the check and the fetch — a TOCTOU window).
+// Closing it fully needs pinning the validated IP for the connection. For a
+// self-hosted demo the operator supplies the URL, so the window isn't reachable;
+// if you host this multi-tenant, add IP pinning + auth + rate limiting (README
+// "Limits").
 
 /** True if `host` is a literal IPv4 or IPv6 address (not a domain name). */
 function isIpLiteral(host: string): boolean {
@@ -224,6 +231,10 @@ async function probeAccessTokens(origin: string): Promise<AccessTokensProbe> {
   try {
     const res = await fetch(`${origin}/_api/v1/access-tokens`, {
       headers: { Accept: "application/json" },
+      // SSRF: do not follow redirects. A validated public host that 3xx-redirects
+      // to an internal address would otherwise be chased server-side. Wix answers
+      // 200 directly here; a redirect is treated as "not a Wix endpoint".
+      redirect: "manual",
       signal: ctrl.signal,
     });
     // 404 / 403 / 5xx all mean "responded but not a Wix endpoint here".
@@ -301,8 +312,6 @@ async function fetchBusinessName(origin: string): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    // redirect: "follow" is the default but be explicit — bare domains
-    // commonly 301 to www and we need the final-target body's <meta> tags.
     const res = await fetch(origin, {
       headers: {
         Accept: "text/html,application/xhtml+xml",
@@ -312,7 +321,11 @@ async function fetchBusinessName(origin: string): Promise<string> {
         "User-Agent":
           "Mozilla/5.0 (compatible; MoltBot-Demo-Introspector/1.0; +https://moltbot.ninja)",
       },
-      redirect: "follow",
+      // SSRF: do not follow redirects to an unvalidated target. The canonical
+      // (www-vs-bare) host was already resolved during detection, so the page is
+      // served here directly; a redirect falls through to the hostname fallback
+      // below (business name is best-effort).
+      redirect: "manual",
       signal: ctrl.signal,
     });
     if (!res.ok) return originHostname(origin);
@@ -452,6 +465,7 @@ async function fetchServices(origin: string, instanceToken: string): Promise<Wix
         Authorization: instanceToken,
       },
       body: JSON.stringify({ query: {} }),
+      redirect: "manual", // SSRF: never chase a redirect off the validated host.
       signal: ctrl.signal,
     });
     if (!res.ok) return [];
@@ -545,6 +559,7 @@ async function fetchStaffNames(
           body: JSON.stringify({
             query: { filter: { serviceId: [svc.id], startDate, endDate } },
           }),
+          redirect: "manual", // SSRF: never chase a redirect off the validated host.
           signal: ctrl.signal,
         });
         if (!res.ok) return;
