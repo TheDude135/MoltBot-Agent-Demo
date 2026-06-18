@@ -15,8 +15,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+    // suppressHydrationWarning on <body>: browser extensions (e.g. ColorZilla
+    // injects cz-shortcut-listen, Grammarly injects data-gr-*) add attributes to
+    // <body> before React hydrates, which would otherwise trip a hydration
+    // mismatch. This suppresses only this element's own attribute diff, not its
+    // children, so real mismatches inside the app still surface.
     <html lang="en">
-      <body>{children}</body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }
