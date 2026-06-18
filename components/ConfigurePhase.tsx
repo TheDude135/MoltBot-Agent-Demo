@@ -4,6 +4,7 @@
 
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import type { Blueprint, BlueprintVariable, Deployment } from "@/lib/types";
 import { EMOJI_VARIABLE_KEY } from "@/lib/types";
 import { CheckCircle } from "@phosphor-icons/react";
@@ -221,7 +222,9 @@ function VariableField({
       {variable.description && (
         <p className="mb-1 text-[10px] text-gray-500">{variable.description}</p>
       )}
-      {variable.type === "textarea" ? (
+      {isTimezoneVariable(variable) ? (
+        <TimezoneSelect value={value} onChange={onChange} />
+      ) : variable.type === "textarea" ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -277,5 +280,82 @@ function VariableField({
         />
       )}
     </div>
+  );
+}
+
+// A timezone variable is any text field whose key or label names a timezone.
+// Detected generically so it works for any blueprint, not just this demo's.
+function isTimezoneVariable(variable: BlueprintVariable): boolean {
+  if (variable.type !== "text") return false;
+  const k = variable.key.toLowerCase();
+  const l = (variable.label || "").toLowerCase();
+  return k.includes("timezone") || k === "tz" || l.includes("timezone");
+}
+
+// Used when the browser/runtime can't enumerate IANA zones (older engines).
+const FALLBACK_TIMEZONES = [
+  "America/Toronto", "America/New_York", "America/Chicago", "America/Denver",
+  "America/Los_Angeles", "America/Vancouver", "America/Sao_Paulo", "Europe/London",
+  "Europe/Paris", "Europe/Berlin", "Europe/Madrid", "Europe/Moscow", "Asia/Jerusalem",
+  "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Asia/Shanghai",
+  "Australia/Sydney", "Pacific/Auckland", "UTC",
+];
+
+let timezoneCache: string[] | null = null;
+/** The full IANA zone list (memoized), or a curated fallback. */
+function allTimezones(): string[] {
+  if (timezoneCache) return timezoneCache;
+  let list: string[] = [];
+  try {
+    const fn = (Intl as unknown as {
+      supportedValuesOf?: (key: string) => string[];
+    }).supportedValuesOf;
+    if (fn) list = fn("timeZone");
+  } catch {
+    /* fall through to the curated list */
+  }
+  timezoneCache = list.length > 0 ? list : FALLBACK_TIMEZONES;
+  return timezoneCache;
+}
+
+// Native dropdown of IANA timezones (type-to-search works out of the box).
+// Hydration-safe: the server and first client render show only the current
+// value, then the full list fills in after mount, so the option sets always
+// match on hydration.
+function TimezoneSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  // Deferred-mount guard: the full IANA list is enumerated client-side only, so
+  // the server and first client render agree (just the current value), then the
+  // list fills in. Setting state on mount is the intended pattern here.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional client-only deferral
+    setMounted(true);
+  }, []);
+
+  const options = useMemo(() => {
+    if (!mounted) return value ? [value] : [];
+    const all = allTimezones();
+    return value && !all.includes(value) ? [value, ...all] : all;
+  }, [mounted, value]);
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-xl border border-white/10 bg-[#1e1b2e] px-3 py-2 text-xs text-white focus:border-violet-500 focus:outline-none"
+    >
+      {!value && <option value="">Select a timezone...</option>}
+      {options.map((tz) => (
+        <option key={tz} value={tz}>
+          {tz}
+        </option>
+      ))}
+    </select>
   );
 }
