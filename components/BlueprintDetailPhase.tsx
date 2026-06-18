@@ -55,12 +55,6 @@ export function BlueprintDetailPhase({
   onBack: () => void;
   onContinue: () => void;
 }) {
-  // The emoji the blueprint ships with (its identity icon), falling back to a
-  // friendly robot. Used purely for display in the hero.
-  const heroEmoji =
-    blueprint.variables.find((v) => v.key === EMOJI_VARIABLE_KEY)?.default?.trim() ||
-    "🤖";
-
   // The variables the user actually personalizes. The emoji is driven by the
   // identity picker on the next screen, so it isn't a "setting" here.
   const settings = blueprint.variables.filter((v) => v.key !== EMOJI_VARIABLE_KEY);
@@ -83,12 +77,7 @@ export function BlueprintDetailPhase({
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-violet-600/20 blur-3xl"
         />
-        <div className="relative flex items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 text-3xl shadow-lg shadow-violet-700/30">
-            <span role="img" aria-label={`${blueprint.name} icon`}>
-              {heroEmoji}
-            </span>
-          </div>
+        <div className="relative">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold tracking-tight text-white">
