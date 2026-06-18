@@ -1,4 +1,4 @@
-# Agent Deploy — a MoltBot Ninja starter
+# Agent Deploy - a MoltBot Ninja starter
 
 A small, complete, **copy-this** web app that deploys AI agents onto **[MoltBot Ninja](https://app.moltbot.ninja)** from reusable **blueprints**, using nothing but the public REST API. No SDK, no Firebase, no secrets in the browser.
 
@@ -8,7 +8,7 @@ It ships a clean, production-shaped pattern you can lift wholesale:
 
 - **Browser → your server → MoltBot Ninja.** The API key never leaves the server (enforced at build time with `import "server-only"`).
 - A guided 4-step wizard: **pick a blueprint → configure → deploy → (optionally) give it a phone number.**
-- Real input validation, SSRF guards, idempotency, and timeouts — the boring-but-important stuff, already done.
+- Real input validation, SSRF guards, idempotency, and timeouts - the boring-but-important stuff, already done.
 
 > **Not a dry run.** Running the deploy flow makes **real** changes on your account: it creates an agent, applies a blueprint, and can install a voice gateway (which may touch telephony + billing). Point it at a **test deployment** first. See [Heads up](#heads-up).
 
@@ -18,19 +18,38 @@ It ships a clean, production-shaped pattern you can lift wholesale:
 
 ```
 Your MoltBot Ninja account
-   └── Deployment  ("instance" — a hosted bot, e.g. on Telegram)
-          ├── main agent
-          └── sub-agents  ←── this demo creates these
-                 ▲
-                 │ deployed from
-              Blueprint  (a reusable template: persona + files + skills + variables)
+│
+└─ Deployment  ("instance")  =  a dedicated cloud server, always on, only yours
+   │   runs the agent runtime and connects OUT to channels (Telegram,
+   │   WhatsApp, a phone number). It is NOT hosted "on Telegram" - the
+   │   channel is just how people reach the agent, not where it lives.
+   │
+   ├─ main agent
+   ├─ sub-agent "Alex"    ┐  each agent: its own workspace, persona,
+   └─ sub-agent "Riley"   ┘  memory, skills, and channel
+           ▲
+           │  deployed from
+        Blueprint   (a reusable template: persona + files + skills + variables)
 ```
 
-- A **deployment** (a.k.a. *instance*) is a hosted bot you own. Agents run on it.
-- A **blueprint** is a reusable template — an agent's persona, files, skills, and the variables that customize it per use.
-- The **public REST API** (`api.moltbot.ninja`) lets you list your blueprints and **deploy a fresh agent from one** onto a deployment. That's what this app does.
+- A **deployment** (the dashboard calls it an *instance*) is **a dedicated cloud server you own** - its own VM, always on. Your agents run on it. It *connects out* to messaging channels (Telegram, WhatsApp, voice); the channel is how people reach an agent, not where the agent lives.
+- A **blueprint** is a reusable template: an agent's persona, files, skills, and the variables that tailor it per use. Build it once, deploy it for everyone.
+- The **public REST API** (`api.moltbot.ninja`) lists your blueprints and **deploys a fresh agent from one** onto a deployment. That is exactly what this app does.
 
-So the flow you'll build toward is: **own a deployment + a blueprint → mint an API key → deploy agents from the blueprint on demand.**
+So the flow you build toward is: **own a deployment + a blueprint -> mint an API key -> deploy agents from the blueprint, on demand.**
+
+### Are the agents isolated? Yes - where it matters.
+
+Several agents can share one deployment (one server), and each is walled off from the others. The runtime **blocks any agent from reading, sending, or spawning another agent's sessions**, so conversations, files, and memory never cross between agents.
+
+| Each agent gets its own... | Shared across the deployment |
+|---|---|
+| workspace + files (persona, protocols) | the server itself (CPU, RAM, disk) |
+| memory + conversation history | the agent runtime and its version |
+| installed skills / tools | the model keys you set (e.g. your Anthropic / ChatGPT connection) |
+| channel (its own Telegram bot or phone number) | billing - one deployment is one bill |
+
+Think of it as **isolated tenants on a dedicated server you own**: cleanly separated where it counts, sharing only the box they run on and the model credentials you configured for that box.
 
 ---
 
@@ -39,17 +58,17 @@ So the flow you'll build toward is: **own a deployment + a blueprint → mint an
 You need four things before this demo is useful: an **account**, a **deployment**, at least one **blueprint**, and an **API key**. All of it is self-serve in the dashboard at **[app.moltbot.ninja](https://app.moltbot.ninja)**.
 
 ### 1. Create an account
-Go to **[app.moltbot.ninja](https://app.moltbot.ninja)** and **sign in with Google**. Your account is created on first sign-in — nothing else to do.
+Go to **[app.moltbot.ninja](https://app.moltbot.ninja)** and **sign in with Google**. Your account is created on first sign-in - nothing else to do.
 
 ### 2. Create a deployment (your first instance)
 In the dashboard, open the **New Agent** tab and walk the wizard:
 
-1. **API Keys** — your Anthropic key (`sk-ant-…`) and a Telegram bot token (from [@BotFather](https://t.me/BotFather)).
-2. **Agent Setup** — a bot name and Telegram username.
-3. **Personality** — optional system behavior (a sensible default is provided).
-4. **Deploy** — accept terms, hit **Deploy Agent**.
+1. **API Keys** - your Anthropic key (`sk-ant-…`) and a Telegram bot token (from [@BotFather](https://t.me/BotFather)).
+2. **Agent Setup** - a bot name and Telegram username.
+3. **Personality** - optional system behavior (a sensible default is provided).
+4. **Deploy** - accept terms, hit **Deploy Agent**.
 
-It provisions a real host and takes **~3–10 minutes** to reach **Operational**. When it's done you have a deployment with a `deploymentId` — that's what you'll deploy agents onto.
+It provisions a real host and takes **~3-10 minutes** to reach **Operational**. When it's done you have a deployment with a `deploymentId` - that's what you'll deploy agents onto.
 
 > **New accounts start with zero deployment quota.** If the wizard asks you to request quota, do so and wait for it to be granted before deploying. (One deployment is enough for this demo.)
 
@@ -57,8 +76,8 @@ It provisions a real host and takes **~3–10 minutes** to reach **Operational**
 A blueprint is a **snapshot of a configured agent**. The simplest path: configure your deployment's agent the way you like (its persona/files/skills), then in the **Blueprints** tab click **Create Blueprint**, give it a name + description, and save. It captures the agent's files, skills, and any `{{variables}}` for later customization.
 
 You only need **one** blueprint to try the demo. The two examples behind this app give a sense of the range:
-- a **Wix Bookings voice receptionist** (answers calls, books appointments) — uses an optional "Site" step to read a Wix site and pre-fill variables;
-- a **chat-only Personal Assistant** (triages email, manages a calendar) — no site, so the demo skips straight to configuration.
+- a **Wix Bookings voice receptionist** (answers calls, books appointments) - uses an optional "Site" step to read a Wix site and pre-fill variables;
+- a **chat-only Personal Assistant** (triages email, manages a calendar) - no site, so the demo skips straight to configuration.
 
 The demo lists **your** blueprints, so whatever you create here is what shows up.
 
@@ -66,10 +85,10 @@ The demo lists **your** blueprints, so whatever you create here is what shows up
 Open the **API Keys** tab → **Create**:
 
 - **Name** it (e.g. `Agent Deploy demo`).
-- **Permissions (scopes)** — tick the ones the demo needs (below).
-- **Deployments** — scope the key to the **specific deployment** you'll deploy onto (per-deployment scoping is required; the key is rejected on any deployment you didn't select).
+- **Permissions (scopes)** - tick the ones the demo needs (below).
+- **Deployments** - scope the key to the **specific deployment** you'll deploy onto (per-deployment scoping is required; the key is rejected on any deployment you didn't select).
 
-The key is shown **once** — copy it immediately. You'll paste it into the demo's `.env.local`.
+The key is shown **once** - copy it immediately. You'll paste it into the demo's `.env.local`.
 
 **Scopes this demo uses** (Ninja key):
 
@@ -79,10 +98,10 @@ The key is shown **once** — copy it immediately. You'll paste it into the demo
 | `blueprints:read` | listing your blueprints |
 | `blueprints:deploy` | deploying a blueprint onto an agent |
 | `agents:write` | creating the new sub-agent |
-| `files:write` | *optional* — the AI persona-seeding step (rewrites `SOUL.md`) |
-| `voice:install` | *optional* — dispatch the voice gateway (voice flow only) |
+| `files:write` | *optional* - the AI persona-seeding step (rewrites `SOUL.md`) |
+| `voice:install` | *optional* - dispatch the voice gateway (voice flow only) |
 
-That's it — you now have an account, a deployment, a blueprint, and a scoped key. Time to run the demo.
+That's it - you now have an account, a deployment, a blueprint, and a scoped key. Time to run the demo.
 
 ---
 
@@ -104,28 +123,28 @@ npm run dev
 
 Open **http://localhost:3030**, pick your blueprint, fill in the fields, and **Deploy**. You'll watch each public REST call happen, step by step.
 
-> Config is read **once at startup** and cached — restart `npm run dev` after editing `.env.local`.
+> Config is read **once at startup** and cached - restart `npm run dev` after editing `.env.local`.
 
 ---
 
 ## What the demo does
 
-### The core flow — deploy an agent from a blueprint
+### The core flow - deploy an agent from a blueprint
 
 1. Lists your blueprints (`GET /v1/blueprints`) and deployments (`GET /v1/deployments`).
 2. You pick a blueprint, a target deployment, an agent name + emoji, and fill any blueprint variables.
 3. Creates a new sub-agent (`POST /v1/deployments/:id/agents`) and polls until it's up (`GET /v1/operations/:opId`).
 4. Deploys the blueprint onto it (`POST /v1/deployments/:id/blueprint-deploys`) and streams progress (`GET …/blueprint-deploys/:requestId`) until `complete`.
 
-Steps 3–4 run **server-side** inside one `/api/provision` route, so the API key never reaches the browser.
+Steps 3-4 run **server-side** inside one `/api/provision` route, so the API key never reaches the browser.
 
 Blueprints with no "site" (like the chat Personal Assistant) skip straight to the configure step; Wix-style blueprints get an optional **Site** step that reads a public site to pre-fill variables.
 
 ### Optional extras
 
-- **Site introspection** (`/api/introspect`, `lib/wix-introspect.ts`) — paste a Wix Bookings URL; the server reads its *public* endpoints and pre-fills variables (business name, services, staff). SSRF-guarded. Swap in your own data source (Shopify, Square, a CSV) to adapt it.
-- **AI persona seeding** (`/api/seed-files`, `lib/ai-seed.ts`) — if `ANTHROPIC_API_KEY` is set, Claude rewrites the agent's `SOUL.md` to fit the business after deploy. Skipped silently when unset; needs the `files:write` scope.
-- **Voice + Wix app** — after a clean deploy, optionally attach a phone number and the Wix Bookings app via the TTMA voice API. This needs a separate **TTMA voice deployment** and a `TTMA_API_KEY` (see `.env.example`). Leave it unconfigured to ignore the voice flow entirely.
+- **Site introspection** (`/api/introspect`, `lib/wix-introspect.ts`) - paste a Wix Bookings URL; the server reads its *public* endpoints and pre-fills variables (business name, services, staff). SSRF-guarded. Swap in your own data source (Shopify, Square, a CSV) to adapt it.
+- **AI persona seeding** (`/api/seed-files`, `lib/ai-seed.ts`) - if `ANTHROPIC_API_KEY` is set, Claude rewrites the agent's `SOUL.md` to fit the business after deploy. Skipped silently when unset; needs the `files:write` scope.
+- **Voice + Wix app** - after a clean deploy, optionally attach a phone number and the Wix Bookings app via the TTMA voice API. This needs a separate **TTMA voice deployment** and a `TTMA_API_KEY` (see `.env.example`). Leave it unconfigured to ignore the voice flow entirely.
 
 ---
 
@@ -135,7 +154,7 @@ Blueprints with no "site" (like the chat Personal Assistant) skip straight to th
 Browser  (no API key, ever)
    │
    ▼
-Next.js server  (your BFF — holds the key)
+Next.js server  (your BFF - holds the key)
    ├─ /api/blueprints, /api/deployments      → proxy to api.moltbot.ninja
    ├─ /api/introspect (POST)                 → read a PUBLIC site, SSRF-guarded
    ├─ /api/provision  (POST)                 → create agent → poll → deploy blueprint
@@ -152,12 +171,12 @@ Next.js server  (your BFF — holds the key)
 
 ### Security model (the reusable lesson)
 
-- **Key never reaches the browser** — enforced by `import "server-only"` at build time.
+- **Key never reaches the browser** - enforced by `import "server-only"` at build time.
 - **Path params regex-validated** and **bodies Zod-validated** at the proxy edge before any upstream call.
-- **Idempotency** — every provision generates a fresh `requestId`; replaying the same body returns the existing record (safe), replaying with different variables returns `409`.
-- **Timeouts** — agent creation is given up to 180 s before surfacing a `504`; the browser never hangs.
-- **SSRF guard** — `/api/introspect` refuses IP-literal hosts and any name that resolves to a private/loopback/link-local/cloud-metadata address before fetching.
-- **No secrets in git** — `.env.local` is git-ignored. If you expose this beyond localhost, add auth + rate limiting in front of the side-effecting routes.
+- **Idempotency** - every provision generates a fresh `requestId`; replaying the same body returns the existing record (safe), replaying with different variables returns `409`.
+- **Timeouts** - agent creation is given up to 180 s before surfacing a `504`; the browser never hangs.
+- **SSRF guard** - `/api/introspect` refuses IP-literal hosts and any name that resolves to a private/loopback/link-local/cloud-metadata address before fetching.
+- **No secrets in git** - `.env.local` is git-ignored. If you expose this beyond localhost, add auth + rate limiting in front of the side-effecting routes.
 
 ---
 
@@ -165,8 +184,8 @@ Next.js server  (your BFF — holds the key)
 
 This repo is meant to be forked. Good places to start:
 
-- **Add your blueprints.** The catalog is just `GET /v1/blueprints` for the key owner — create blueprints in your account and they appear automatically. No code change.
-- **Swap the data source.** Replace `lib/wix-introspect.ts` with your own pre-fill logic (Shopify, a CRM, a spreadsheet) — or drop the Site step entirely for site-less blueprints.
+- **Add your blueprints.** The catalog is just `GET /v1/blueprints` for the key owner - create blueprints in your account and they appear automatically. No code change.
+- **Swap the data source.** Replace `lib/wix-introspect.ts` with your own pre-fill logic (Shopify, a CRM, a spreadsheet) - or drop the Site step entirely for site-less blueprints.
 - **Add real auth.** Today the key in `.env.local` *is* the operator. For a multi-tenant portal, put an auth provider in front and store a key per user/tenant; keep the BFF pattern so keys stay server-side.
 - **Reskin freely.** The UI is plain Tailwind components in `components/`; the API logic is isolated in `lib/` and `app/api/`.
 
@@ -174,7 +193,7 @@ This repo is meant to be forked. Good places to start:
 
 ## Heads up
 
-Running the deploy flow performs **real** side effects with your key: it creates a sub-agent, applies a blueprint, can install a Wix Bookings app, and can dispatch a voice gateway (which may touch telephony + billing). If `ANTHROPIC_API_KEY` is set, the persona-seeding pass spends Anthropic tokens. There is no built-in "demo mode" — point it at a **test deployment** (and ideally an `mbn_test_` key) first.
+Running the deploy flow performs **real** side effects with your key: it creates a sub-agent, applies a blueprint, can install a Wix Bookings app, and can dispatch a voice gateway (which may touch telephony + billing). If `ANTHROPIC_API_KEY` is set, the persona-seeding pass spends Anthropic tokens. There is no built-in "demo mode" - point it at a **test deployment** (and ideally an `mbn_test_` key) first.
 
 ---
 
@@ -203,4 +222,4 @@ Running the deploy flow performs **real** side effects with your key: it creates
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT - see [LICENSE](./LICENSE).
