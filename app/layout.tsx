@@ -1,3 +1,5 @@
+// Root layout for the Agent Deploy demo. Sets the document metadata and pulls in
+// global styles; every page renders inside this <html>/<body> shell.
 import type { Metadata } from "next";
 import "./globals.css";
 
