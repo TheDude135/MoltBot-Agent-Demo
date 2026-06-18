@@ -18,9 +18,9 @@ const OP_ID_REGEX = /^op_[A-Za-z0-9_-]{8,64}$/;
 
 export async function GET(
   _request: Request,
-  { params }: { params: { opId: string } },
+  { params }: { params: Promise<{ opId: string }> },
 ) {
-  const opId = params.opId;
+  const { opId } = await params;
   if (!opId || !OP_ID_REGEX.test(opId)) {
     return NextResponse.json(
       { error: "Invalid opId format", code: "validation-failed" },

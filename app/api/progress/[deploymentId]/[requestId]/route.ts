@@ -14,9 +14,9 @@ const REQUEST_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
 
 export async function GET(
   _request: Request,
-  { params }: { params: { deploymentId: string; requestId: string } },
+  { params }: { params: Promise<{ deploymentId: string; requestId: string }> },
 ) {
-  const { deploymentId, requestId } = params;
+  const { deploymentId, requestId } = await params;
   if (!DEPLOYMENT_ID_REGEX.test(deploymentId)) {
     return NextResponse.json(
       { error: "Invalid deploymentId", code: "validation-failed" },

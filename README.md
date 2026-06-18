@@ -88,7 +88,7 @@ That's it — you now have an account, a deployment, a blueprint, and a scoped k
 
 ## Run the demo (5 minutes)
 
-Requires **Node ≥ 18.18**.
+Requires **Node ≥ 20.9** (Next.js 16).
 
 ```bash
 git clone https://github.com/TheDude135/MoltBot-Agent-Demo

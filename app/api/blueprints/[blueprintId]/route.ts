@@ -12,9 +12,9 @@ const BLUEPRINT_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
 
 export async function GET(
   _request: Request,
-  { params }: { params: { blueprintId: string } },
+  { params }: { params: Promise<{ blueprintId: string }> },
 ) {
-  const { blueprintId } = params;
+  const { blueprintId } = await params;
   if (!BLUEPRINT_ID_REGEX.test(blueprintId)) {
     return NextResponse.json(
       { error: "Invalid blueprintId format", code: "validation-failed" },
