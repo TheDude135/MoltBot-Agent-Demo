@@ -4,13 +4,16 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Blueprint, BlueprintVariable, Deployment } from "@/lib/types";
-import { EMOJI_VARIABLE_KEY } from "@/lib/types";
-import { CheckCircle } from "@phosphor-icons/react";
+import { EMOJI_VARIABLE_KEY, NAME_VARIABLE_KEY } from "@/lib/types";
+import { CaretDown, CheckCircle } from "@phosphor-icons/react";
 import { Button, Label, PhaseHeader, Section } from "./atoms";
 
-const EMOJI_OPTIONS = ["🤖", "🧠", "💼", "📞", "🎯", "⭐", "🔥", "💡", "🚀", "🛠️", "📊", "🎨"];
+const EMOJI_OPTIONS = [
+  "🤖", "🧠", "💼", "📞", "🎯", "⭐", "🔥", "💡", "🚀", "🛠️", "📊", "🎨",
+  "📅", "📧", "✅", "🔔", "🤝", "🧩", "📌", "✍️", "🗓️", "💬", "📨", "🗂️",
+];
 
 export function ConfigurePhase(props: {
   blueprint: Blueprint;
@@ -41,10 +44,11 @@ export function ConfigurePhase(props: {
   const noOperational =
     props.deployments.length === 0 && props.allDeployments.length > 0;
 
-  // The agent emoji is driven solely by the identity picker above, so hide the
-  // blueprint's agent_emoji variable from the list — one control, never two.
+  // The agent name and emoji are driven solely by the identity controls above
+  // (the Name field and the emoji picker), so hide those blueprint variables
+  // from the list - one control each, never two.
   const visibleVariables = props.blueprint.variables.filter(
-    (v) => v.key !== EMOJI_VARIABLE_KEY,
+    (v) => v.key !== EMOJI_VARIABLE_KEY && v.key !== NAME_VARIABLE_KEY,
   );
 
   return (
@@ -158,22 +162,10 @@ export function ConfigurePhase(props: {
           </div>
           <div>
             <Label>Emoji</Label>
-            <div className="flex max-w-[140px] flex-wrap gap-1 rounded-xl border border-white/10 bg-[#1e1b2e] p-1.5">
-              {EMOJI_OPTIONS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => props.onChangeAgentEmoji(e)}
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm transition-all ${
-                    props.agentEmoji === e
-                      ? "bg-violet-500/30 ring-1 ring-violet-500"
-                      : "hover:bg-white/10"
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
+            <EmojiPicker
+              value={props.agentEmoji}
+              onChange={props.onChangeAgentEmoji}
+            />
           </div>
         </div>
       </Section>
@@ -278,6 +270,86 @@ function VariableField({
           placeholder={variable.default || undefined}
           className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:border-violet-500 focus:outline-none"
         />
+      )}
+    </div>
+  );
+}
+
+// Emoji identity picker. A compact trigger showing the current emoji that
+// opens a popover menu of choices on click; closes on select, outside-click,
+// or Escape. Replaces the always-open grid so the Configure form stays tidy.
+function EmojiPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Choose an emoji"
+        className="flex h-[42px] min-w-[72px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#1e1b2e] px-3 text-lg transition-colors hover:border-white/20"
+      >
+        <span role="img" aria-hidden>
+          {value}
+        </span>
+        <CaretDown
+          size={12}
+          weight="bold"
+          className={`text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-1.5 w-56 rounded-xl border border-white/10 bg-[#1e1b2e] p-1.5 shadow-xl shadow-black/50"
+        >
+          <div className="grid grid-cols-6 gap-1">
+            {EMOJI_OPTIONS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                role="menuitemradio"
+                aria-checked={value === e}
+                onClick={() => {
+                  onChange(e);
+                  setOpen(false);
+                }}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-all ${
+                  value === e
+                    ? "bg-violet-500/30 ring-1 ring-violet-500"
+                    : "hover:bg-white/10"
+                }`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -21,6 +21,14 @@ export type VariableType =
 // control that can diverge from the identity icon shown in the Ninja UI.
 export const EMOJI_VARIABLE_KEY = "agent_emoji";
 
+// The agent's name has a single source of truth: the identity "Name" field in
+// the Configure phase, which also generates the agentId. Blueprints also expose
+// the name as a variable (used in their IDENTITY/SOUL/persona files); when
+// present, that variable is driven from the Name field and hidden from the
+// variable list, exactly like EMOJI_VARIABLE_KEY, so there is never a second
+// name control that can diverge from the agent's identity.
+export const NAME_VARIABLE_KEY = "agent_name";
+
 export interface BlueprintVariable {
   key: string;
   label: string;

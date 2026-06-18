@@ -32,7 +32,7 @@ import type {
   VoiceDeployment,
   VoiceOperation,
 } from "@/lib/types";
-import { EMOJI_VARIABLE_KEY } from "@/lib/types";
+import { EMOJI_VARIABLE_KEY, NAME_VARIABLE_KEY } from "@/lib/types";
 import { generateAgentId, generateRequestId, isValidAgentId } from "@/lib/ids";
 import { CatalogPhase } from "@/components/CatalogPhase";
 import { BlueprintDetailPhase } from "@/components/BlueprintDetailPhase";
@@ -466,15 +466,17 @@ export default function Page() {
     setPhase("provisioning");
 
     const requestId = generateRequestId();
-    // The identity emoji (picker) is the single source of truth. When the
-    // blueprint defines an agent_emoji variable (used in its persona files),
-    // mirror the picker into it so the Ninja UI icon, the managed-agent
-    // identity, and the persona never diverge — one control, one value. Only
-    // inject it when the blueprint actually declares the variable, so we never
-    // send an unknown key for blueprints that don't use it.
-    const variables = selectedBlueprint.variables.some((v) => v.key === EMOJI_VARIABLE_KEY)
-      ? { ...variableValues, [EMOJI_VARIABLE_KEY]: agentEmoji }
-      : variableValues;
+    // The identity controls (the Name field and the emoji picker) are the single
+    // source of truth. When the blueprint declares the matching variables (used
+    // in its IDENTITY/SOUL/persona files), mirror the controls into them so the
+    // Ninja UI, the managed-agent identity, and the persona never diverge - one
+    // control, one value. Only inject keys the blueprint actually declares, so we
+    // never send an unknown variable.
+    const declares = (key: string) =>
+      selectedBlueprint.variables.some((v) => v.key === key);
+    const variables: Record<string, string> = { ...variableValues };
+    if (declares(EMOJI_VARIABLE_KEY)) variables[EMOJI_VARIABLE_KEY] = agentEmoji;
+    if (declares(NAME_VARIABLE_KEY)) variables[NAME_VARIABLE_KEY] = agentName.trim();
     const payload = {
       deploymentId: targetDeploymentId,
       agentId: generatedAgentId,
