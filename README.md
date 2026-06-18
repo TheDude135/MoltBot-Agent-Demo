@@ -21,8 +21,7 @@ Your MoltBot Ninja account
 │
 └─ Deployment  ("instance")  =  a dedicated cloud server, always on, only yours
    │   runs the agent runtime and connects OUT to channels (Telegram,
-   │   WhatsApp, a phone number). It is NOT hosted "on Telegram" - the
-   │   channel is just how people reach the agent, not where it lives.
+   │   WhatsApp, a phone number).
    │
    ├─ main agent
    ├─ sub-agent "Alex"    ┐  each agent: its own workspace, persona,
