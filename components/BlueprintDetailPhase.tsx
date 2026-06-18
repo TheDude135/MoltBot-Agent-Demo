@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react";
 import type { Blueprint, BlueprintVariable } from "@/lib/types";
-import { EMOJI_VARIABLE_KEY, NAME_VARIABLE_KEY } from "@/lib/types";
+import { personalizableVariables } from "@/lib/blueprint";
 import { describeSkill, type SkillIconKey } from "@/lib/skill-catalog";
 import { formatBytes, tidyDashes } from "@/lib/format";
 import {
@@ -57,9 +57,7 @@ export function BlueprintDetailPhase({
 }) {
   // The variables the user actually personalizes. The name and emoji are driven
   // by the identity controls on the next screen, so they aren't "settings" here.
-  const settings = blueprint.variables.filter(
-    (v) => v.key !== EMOJI_VARIABLE_KEY && v.key !== NAME_VARIABLE_KEY,
-  );
+  const settings = personalizableVariables(blueprint);
   const files = blueprint.fileManifest;
   const skills = blueprint.skills;
 

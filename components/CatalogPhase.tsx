@@ -4,6 +4,7 @@
 "use client";
 
 import type { Blueprint } from "@/lib/types";
+import { personalizableVariables } from "@/lib/blueprint";
 import { tidyDashes } from "@/lib/format";
 import { Card, CenteredStatus, Chip, PhaseHeader } from "./atoms";
 
@@ -62,35 +63,39 @@ export function CatalogPhase({
         description="Each blueprint is a pre-configured agent. Clone one and tailor it to your business."
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {blueprints.map((bp) => (
-          <button
-            key={bp.id}
-            onClick={() => onSelect(bp)}
-            className="group rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-left shadow-[0_20px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-violet-500/50 hover:bg-violet-500/[0.06]"
-          >
-            <p className="text-sm font-semibold text-white">{bp.name}</p>
-            {bp.description && (
-              <p className="mt-1 line-clamp-2 text-xs text-gray-500">
-                {tidyDashes(bp.description)}
-              </p>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <Chip>v{bp.version}</Chip>
-              <Chip>{bp.fileManifest.length} files</Chip>
-              {bp.skills.length > 0 && (
-                <Chip tone="emerald">
-                  {bp.skills.length} skill{bp.skills.length !== 1 ? "s" : ""}
-                </Chip>
+        {blueprints.map((bp) => {
+          // Count only the fields the user personalizes, matching the intro page
+          // and Configure form (identity-driven name/emoji are not shown).
+          const settingsCount = personalizableVariables(bp).length;
+          return (
+            <button
+              key={bp.id}
+              onClick={() => onSelect(bp)}
+              className="group rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-left shadow-[0_20px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-violet-500/50 hover:bg-violet-500/[0.06]"
+            >
+              <p className="text-sm font-semibold text-white">{bp.name}</p>
+              {bp.description && (
+                <p className="mt-1 line-clamp-2 text-xs text-gray-500">
+                  {tidyDashes(bp.description)}
+                </p>
               )}
-              {bp.variables.length > 0 && (
-                <Chip tone="violet">
-                  {bp.variables.length} var
-                  {bp.variables.length !== 1 ? "s" : ""}
-                </Chip>
-              )}
-            </div>
-          </button>
-        ))}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Chip>v{bp.version}</Chip>
+                <Chip>{bp.fileManifest.length} files</Chip>
+                {bp.skills.length > 0 && (
+                  <Chip tone="emerald">
+                    {bp.skills.length} skill{bp.skills.length !== 1 ? "s" : ""}
+                  </Chip>
+                )}
+                {settingsCount > 0 && (
+                  <Chip tone="violet">
+                    {settingsCount} setting{settingsCount !== 1 ? "s" : ""}
+                  </Chip>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

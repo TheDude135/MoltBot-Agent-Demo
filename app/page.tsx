@@ -2,8 +2,11 @@
 
 // Orchestrator for the demo flow. Phase logic, shared state, and the
 // browser-side API calls live here. Each phase's UI is its own component
-// in /components — page.tsx stays under the 800-line cap from CLAUDE.md
-// and keeps cognitive overhead low while reading the control flow.
+// in /components to keep the control flow readable. NOTE: this file has grown
+// past the 800-line CLAUDE.md cap; the voice-install flow (state + handlers +
+// poller, ~200 lines) is the natural next extraction into a useVoiceInstall
+// hook. Deferred deliberately - it touches voice paths that need a live
+// deployment to validate end to end.
 //
 // Phases:
 //   1. catalog          — load blueprints + deployments in parallel, then pick one

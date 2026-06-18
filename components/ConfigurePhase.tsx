@@ -1,4 +1,4 @@
-// Configure phase — user reviews/edits the blueprint variables and chooses
+// Configure phase - user reviews/edits the blueprint variables and chooses
 // the target deployment. The "Pre-filled from <business>" banner only shows
 // when the URL phase produced an introspectSummary.
 
@@ -6,7 +6,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Blueprint, BlueprintVariable, Deployment } from "@/lib/types";
-import { EMOJI_VARIABLE_KEY, NAME_VARIABLE_KEY } from "@/lib/types";
+import { personalizableVariables } from "@/lib/blueprint";
+import { tidyDashes } from "@/lib/format";
 import { CaretDown, CheckCircle } from "@phosphor-icons/react";
 import { Button, Label, PhaseHeader, Section } from "./atoms";
 
@@ -45,17 +46,20 @@ export function ConfigurePhase(props: {
     props.deployments.length === 0 && props.allDeployments.length > 0;
 
   // The agent name and emoji are driven solely by the identity controls above
-  // (the Name field and the emoji picker), so hide those blueprint variables
-  // from the list - one control each, never two.
-  const visibleVariables = props.blueprint.variables.filter(
-    (v) => v.key !== EMOJI_VARIABLE_KEY && v.key !== NAME_VARIABLE_KEY,
-  );
+  // (the Name field and the emoji picker), so they're hidden from this list -
+  // one control each, never two. personalizableVariables() is the single source
+  // of that rule, shared with the catalog card and the intro page.
+  const visibleVariables = personalizableVariables(props.blueprint);
 
   return (
     <div className="space-y-5">
       <PhaseHeader
         title={`Configure ${props.blueprint.name}`}
-        description={props.blueprint.description || undefined}
+        description={
+          props.blueprint.description
+            ? tidyDashes(props.blueprint.description)
+            : undefined
+        }
         onBack={props.onBack}
       />
 
@@ -212,7 +216,9 @@ function VariableField({
         {variable.label || variable.key}
       </Label>
       {variable.description && (
-        <p className="mb-1 text-[10px] text-gray-500">{variable.description}</p>
+        <p className="mb-1 text-[10px] text-gray-500">
+          {tidyDashes(variable.description)}
+        </p>
       )}
       {isTimezoneVariable(variable) ? (
         <TimezoneSelect value={value} onChange={onChange} />
