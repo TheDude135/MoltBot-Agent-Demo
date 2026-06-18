@@ -4,6 +4,7 @@
 "use client";
 
 import type { Blueprint } from "@/lib/types";
+import { tidyDashes } from "@/lib/format";
 import { Card, CenteredStatus, Chip, PhaseHeader } from "./atoms";
 
 export function CatalogPhase({
@@ -70,7 +71,7 @@ export function CatalogPhase({
             <p className="text-sm font-semibold text-white">{bp.name}</p>
             {bp.description && (
               <p className="mt-1 line-clamp-2 text-xs text-gray-500">
-                {bp.description}
+                {tidyDashes(bp.description)}
               </p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">

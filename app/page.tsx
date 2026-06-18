@@ -35,6 +35,7 @@ import type {
 import { EMOJI_VARIABLE_KEY } from "@/lib/types";
 import { generateAgentId, generateRequestId, isValidAgentId } from "@/lib/ids";
 import { CatalogPhase } from "@/components/CatalogPhase";
+import { BlueprintDetailPhase } from "@/components/BlueprintDetailPhase";
 import { UrlPhase } from "@/components/UrlPhase";
 import { ConfigurePhase } from "@/components/ConfigurePhase";
 import { DonePhase, ErrorPhase, type SeedNote } from "@/components/DonePhase";
@@ -45,6 +46,7 @@ import { SetupTimeline } from "@/components/SetupTimeline";
 
 type Phase =
   | "catalog"
+  | "detail"
   | "url"
   | "configure"
   | "provisioning"
@@ -83,6 +85,7 @@ const STEPS_WITH_SITE = ["Blueprint", "Site", "Configure", "Deploy", "Voice"] as
 const STEPS_NO_SITE = ["Blueprint", "Configure", "Deploy", "Voice"] as const;
 const STEP_LABEL_FOR_PHASE: Record<Phase, string> = {
   catalog: "Blueprint",
+  detail: "Blueprint",
   url: "Site",
   configure: "Configure",
   provisioning: "Deploy",
@@ -217,10 +220,9 @@ export default function Page() {
     };
   }, []);
 
-  // Initialize variable defaults when a blueprint is selected, then route to
-  // the Site (url) phase ONLY for blueprints that carry Wix-introspectable
-  // variables. Any other blueprint (e.g. the Personal Assistant) has no site to
-  // read, so it goes straight to manual Configure.
+  // Initialize variable defaults when a blueprint is selected, then show its
+  // intro page (the "detail" phase). The user reads what the blueprint can do
+  // and explicitly continues to the deploy form from there.
   const handleSelectBlueprint = useCallback((bp: Blueprint) => {
     setSelectedBlueprint(bp);
     const defaults: Record<string, string> = {};
@@ -237,8 +239,16 @@ export default function Page() {
     setSiteUrl("");
     setIntrospectError(null);
     setIntrospectSummary(null);
-    setPhase(blueprintUsesSite(bp) ? "url" : "configure");
+    setPhase("detail");
   }, []);
+
+  // From the blueprint intro page, open the deploy form: the Site (url) phase
+  // ONLY for blueprints that carry Wix-introspectable variables; any other
+  // blueprint (e.g. the Personal Assistant) goes straight to manual Configure.
+  const handleContinueToDeploy = useCallback(() => {
+    if (!selectedBlueprint) return;
+    setPhase(blueprintUsesSite(selectedBlueprint) ? "url" : "configure");
+  }, [selectedBlueprint]);
 
   // POST /api/introspect — on success overlay the returned variable values
   // (without clobbering blueprint defaults for keys the introspector left
@@ -753,6 +763,18 @@ export default function Page() {
         />
       )}
 
+      {phase === "detail" && selectedBlueprint && (
+        <BlueprintDetailPhase
+          blueprint={selectedBlueprint}
+          usesSite={usesSite}
+          onBack={() => {
+            setPhase("catalog");
+            setSelectedBlueprint(null);
+          }}
+          onContinue={handleContinueToDeploy}
+        />
+      )}
+
       {phase === "url" && selectedBlueprint && (
         <UrlPhase
           blueprint={selectedBlueprint}
@@ -761,10 +783,7 @@ export default function Page() {
           introspecting={introspecting}
           introspectError={introspectError}
           onSubmit={handleIntrospect}
-          onBack={() => {
-            setPhase("catalog");
-            setSelectedBlueprint(null);
-          }}
+          onBack={() => setPhase("detail")}
         />
       )}
 
@@ -792,9 +811,8 @@ export default function Page() {
           introspectSummary={introspectSummary}
           onBack={() => {
             // Site-less blueprints never visited the Site step, so Back returns
-            // to the catalog (mirroring the Site phase's own back behavior).
-            if (usesSite) setPhase("url");
-            else { setPhase("catalog"); setSelectedBlueprint(null); }
+            // to the blueprint intro page (mirroring the Site phase's own back).
+            setPhase(usesSite ? "url" : "detail");
           }}
           onSubmit={submitProvision}
           canSubmit={canSubmit}

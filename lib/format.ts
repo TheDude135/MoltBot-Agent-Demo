@@ -5,13 +5,31 @@
 
 /** Friendly names for the skills a blueprint installs, keyed by slug. */
 const SKILL_LABELS: Record<string, string> = {
-  "relationship-hub": "CRM — caller memory (RelationshipHub)",
-  "dojo-relationship-hub": "CRM — caller memory (RelationshipHub)",
+  "relationship-hub": "CRM - caller memory (RelationshipHub)",
+  "dojo-relationship-hub": "CRM - caller memory (RelationshipHub)",
   "dojo-voice-agent": "Voice agent behavior",
   "voice-call-trigger": "Outbound calling",
   "dojo-appointment-scheduler": "Appointment scheduler",
   "dojo-inbox-manager": "Inbox manager",
 };
+
+/**
+ * Normalize em/en dashes to a plain hyphen for display. Applied to any
+ * blueprint-provided copy we render (descriptions, labels) so the UI follows
+ * the project's hyphen-only house style even when the stored data does not.
+ */
+export function tidyDashes(s: string): string {
+  return s.replace(/[—–]/g, "-");
+}
+
+/** Compact human file size, e.g. 7290 -> "7.1 KB". */
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${Math.round(n)} B`;
+  const kb = n / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
 
 /** Short, human label for one deploy step (e.g. "skill:relationship-hub"). */
 export function formatStepName(step: string): string {
