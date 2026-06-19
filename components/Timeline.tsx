@@ -48,6 +48,8 @@ export function EndpointPill({ method, path }: { method: string; path: string })
 export interface Substep {
   key: string;
   label: string;
+  /** One-line, plain-language explanation of what this sub-step does. */
+  desc?: string;
   status: StepStatus;
 }
 
@@ -90,27 +92,34 @@ export function Timeline({ title, steps }: { title: string; steps: TimelineStep[
               )}
               {s.method && s.path && <EndpointPill method={s.method} path={s.path} />}
               {s.substeps && s.substeps.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                  {s.substeps.map((ss) => (
-                    <span
-                      key={ss.key}
-                      className="inline-flex items-center gap-1 text-[10px] text-gray-500"
-                    >
-                      <StatusIcon status={ss.status} size={12} />
-                      <span
-                        className={
-                          ss.status === "active"
-                            ? "text-violet-200"
-                            : ss.status === "done"
-                              ? "text-gray-400"
-                              : ""
-                        }
-                      >
-                        {ss.label}
-                      </span>
-                    </span>
-                  ))}
-                </div>
+                // One sub-step per row (stacked), each with its own status icon,
+                // friendly title, and an explanatory one-liner.
+                <ul className="mt-2.5 space-y-2 border-l border-white/10 pl-3">
+                  {s.substeps.map((ss) => {
+                    const st = TONE[ss.status];
+                    return (
+                      <li key={ss.key} className="flex items-start gap-2">
+                        <span className="mt-0.5 flex-shrink-0">
+                          <StatusIcon status={ss.status} size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p
+                            className={`text-[11px] font-semibold ${
+                              ss.status === "pending" ? "text-gray-500" : st.title
+                            }`}
+                          >
+                            {ss.label}
+                          </p>
+                          {ss.desc && (
+                            <p className="mt-0.5 text-[10px] leading-snug text-gray-500">
+                              {ss.desc}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           </div>

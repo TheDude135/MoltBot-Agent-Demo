@@ -7,27 +7,10 @@
 "use client";
 
 import type { BlueprintDeployRecord } from "@/lib/types";
-import { describeStep, formatStepName } from "@/lib/format";
+import { buildDeploySubsteps } from "@/lib/deploy-steps";
 import type { SeedNote } from "./DonePhase";
 import { PhaseHeader } from "./atoms";
-import { Timeline, type StepStatus, type Substep, type TimelineStep } from "./Timeline";
-
-function buildSubsteps(rec: BlueprintDeployRecord): Substep[] {
-  const seen = new Set<string>();
-  const ordered = [...rec.completedSteps, ...rec.pendingSteps].filter((s) =>
-    seen.has(s) ? false : (seen.add(s), true),
-  );
-  return ordered.map((step) => {
-    const status: StepStatus = rec.completedSteps.includes(step)
-      ? "done"
-      : rec.failedSteps.includes(step)
-        ? "failed"
-        : rec.pendingSteps[0] === step
-          ? "active"
-          : "pending";
-    return { key: step, label: formatStepName(step), status };
-  });
-}
+import { Timeline, type StepStatus, type TimelineStep } from "./Timeline";
 
 export function SetupTimeline({
   phase,
@@ -78,7 +61,7 @@ export function SetupTimeline({
       method: "POST",
       path: "/v1/deployments/{id}/blueprint-deploys",
       status: deployStatus,
-      substeps: deployRecord ? buildSubsteps(deployRecord) : undefined,
+      substeps: deployRecord ? buildDeploySubsteps(deployRecord) : undefined,
     },
     // AI persona seeding reads the site to tailor SOUL.md — only meaningful for
     // blueprints that have a site. Site-less ones keep their templated SOUL.md.
@@ -97,14 +80,6 @@ export function SetupTimeline({
         ]
       : []),
   ];
-
-  // While the deploy is active, surface the live sub-step name as the
-  // description so the row reflects exactly what the API is doing right now.
-  const deployStep = steps[1];
-  const activeSub = deployRecord?.pendingSteps[0];
-  if (deployStep && deployStatus === "active" && activeSub) {
-    deployStep.desc = describeStep(activeSub) ?? "Applying the blueprint to the agent.";
-  }
 
   return (
     <div className="space-y-4">
