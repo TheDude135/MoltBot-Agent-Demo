@@ -174,6 +174,13 @@ describe("getDeployProgress", () => {
     const e = await caught(getDeployProgress("d", "r"));
     expect(e.message).toBe("HTTP 503");
   });
+  it("encodes path segments so an id cannot break out of the URL path", async () => {
+    const fn = stubFetch(() => ok({ deploy: {} }));
+    await getDeployProgress("dep/../x", "r r");
+    expect(fn).toHaveBeenCalledWith("/api/progress/dep%2F..%2Fx/r%20r", {
+      cache: "no-store",
+    });
+  });
 });
 
 describe("seedFiles", () => {

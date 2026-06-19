@@ -63,28 +63,40 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
   return typeof body[key] === "string" ? (body[key] as string) : undefined;
 }
 
+// Throw a uniform ApiError from a non-OK response: prefer the server's `error`
+// text, fall back to a per-call message, and carry status (+ optional code/step).
+function fail(
+  res: Response,
+  body: Record<string, unknown>,
+  fallback: string,
+  extra: { code?: string; step?: string } = {},
+): never {
+  throw new ApiError(errorText(body) ?? fallback, {
+    status: res.status,
+    ...extra,
+  });
+}
+
+// Encode a single path segment so an id never breaks out of the URL path. The
+// ids we send are server-generated/validated, but encoding is defense-in-depth.
+function seg(value: string): string {
+  return encodeURIComponent(value);
+}
+
 // ── Catalog ──────────────────────────────────────────────────────────
 
 export async function getBlueprints(): Promise<Blueprint[]> {
   const res = await fetch("/api/blueprints", { cache: "no-store" });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(errorText(body) ?? `Blueprints HTTP ${res.status}`, {
-      status: res.status,
-    });
-  }
-  return ((body as { blueprints?: Blueprint[] }).blueprints ?? []);
+  if (!res.ok) fail(res, body, `Blueprints HTTP ${res.status}`);
+  return (body as { blueprints?: Blueprint[] }).blueprints ?? [];
 }
 
 export async function getDeployments(): Promise<Deployment[]> {
   const res = await fetch("/api/deployments", { cache: "no-store" });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(errorText(body) ?? `Deployments HTTP ${res.status}`, {
-      status: res.status,
-    });
-  }
-  return ((body as { deployments?: Deployment[] }).deployments ?? []);
+  if (!res.ok) fail(res, body, `Deployments HTTP ${res.status}`);
+  return (body as { deployments?: Deployment[] }).deployments ?? [];
 }
 
 // ── Site introspection ───────────────────────────────────────────────
@@ -106,8 +118,7 @@ export async function introspectSite(url: string): Promise<IntrospectResult> {
   });
   const body = await readJson(res);
   if (!res.ok) {
-    throw new ApiError(errorText(body) ?? `Could not introspect (${res.status}).`, {
-      status: res.status,
+    fail(res, body, `Could not introspect (${res.status}).`, {
       code: str(body, "code"),
     });
   }
@@ -143,9 +154,7 @@ export async function provisionAgent(
   const body = await readJson(res);
   if (!res.ok) {
     const step = str(body, "step");
-    const fallback = `Provision failed (${res.status})${step ? ` at ${step}` : ""}`;
-    throw new ApiError(errorText(body) ?? fallback, {
-      status: res.status,
+    fail(res, body, `Provision failed (${res.status})${step ? ` at ${step}` : ""}`, {
       code: str(body, "code"),
       step,
     });
@@ -159,15 +168,11 @@ export async function getDeployProgress(
   deploymentId: string,
   requestId: string,
 ): Promise<BlueprintDeployRecord> {
-  const res = await fetch(`/api/progress/${deploymentId}/${requestId}`, {
+  const res = await fetch(`/api/progress/${seg(deploymentId)}/${seg(requestId)}`, {
     cache: "no-store",
   });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(errorText(body) ?? `HTTP ${res.status}`, {
-      status: res.status,
-    });
-  }
+  if (!res.ok) fail(res, body, `HTTP ${res.status}`);
   return (body as { deploy: BlueprintDeployRecord }).deploy;
 }
 
@@ -200,12 +205,7 @@ export async function seedFiles(
     body: JSON.stringify(payload),
   });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(
-      errorText(body) ?? `Seeding request failed (${res.status}).`,
-      { status: res.status },
-    );
-  }
+  if (!res.ok) fail(res, body, `Seeding request failed (${res.status}).`);
   return body as unknown as SeedFilesResult;
 }
 
@@ -215,12 +215,9 @@ export async function getVoiceDeployments(): Promise<VoiceDeployment[]> {
   const res = await fetch("/api/voice-deployments", { cache: "no-store" });
   const body = await readJson(res);
   if (!res.ok) {
-    throw new ApiError(
-      errorText(body) ?? `Could not load voice deployments (HTTP ${res.status}).`,
-      { status: res.status },
-    );
+    fail(res, body, `Could not load voice deployments (HTTP ${res.status}).`);
   }
-  return ((body as { deployments?: VoiceDeployment[] }).deployments ?? []);
+  return (body as { deployments?: VoiceDeployment[] }).deployments ?? [];
 }
 
 export interface InstallAppPayload {
@@ -237,12 +234,7 @@ export async function installApp(payload: InstallAppPayload): Promise<void> {
     body: JSON.stringify(payload),
   });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(
-      errorText(body) ?? `Wix app install failed (HTTP ${res.status}).`,
-      { status: res.status },
-    );
-  }
+  if (!res.ok) fail(res, body, `Wix app install failed (HTTP ${res.status}).`);
 }
 
 export interface InstallVoicePayload {
@@ -267,22 +259,15 @@ export async function installVoice(
     body: JSON.stringify(payload),
   });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(
-      errorText(body) ?? `Install dispatch failed (HTTP ${res.status}).`,
-      { status: res.status },
-    );
-  }
+  if (!res.ok) fail(res, body, `Install dispatch failed (HTTP ${res.status}).`);
   return body as unknown as InstallVoiceResult;
 }
 
 export async function getVoiceOperation(opId: string): Promise<VoiceOperation> {
-  const res = await fetch(`/api/voice-operation/${opId}`, { cache: "no-store" });
+  const res = await fetch(`/api/voice-operation/${seg(opId)}`, {
+    cache: "no-store",
+  });
   const body = await readJson(res);
-  if (!res.ok) {
-    throw new ApiError(errorText(body) ?? `HTTP ${res.status}`, {
-      status: res.status,
-    });
-  }
+  if (!res.ok) fail(res, body, `HTTP ${res.status}`);
   return (body as { operation: VoiceOperation }).operation;
 }
