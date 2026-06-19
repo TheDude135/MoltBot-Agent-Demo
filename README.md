@@ -124,6 +124,18 @@ Open **http://localhost:3030**, pick your blueprint, fill in the fields, and **D
 
 > Config is read **once at startup** and cached - restart `npm run dev` after editing `.env.local`.
 
+### Develop
+
+```bash
+npm run typecheck   # tsc, no emit
+npm run lint        # eslint (flat config)
+npm test            # vitest - unit tests for the pure lib/ modules
+```
+
+The control flow is a thin orchestrator (`app/page.tsx`) wiring three flow hooks
+(`hooks/useCatalog`, `hooks/useDeployFlow`, `hooks/useVoiceInstall`). Every call
+to the demo's own API routes goes through one tested client, `lib/browser-api.ts`.
+
 ---
 
 ## What the demo does

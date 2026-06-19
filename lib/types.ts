@@ -62,6 +62,24 @@ export interface Blueprint {
   updatedAt: string | null;
 }
 
+// ─── Demo wizard flow state (these are not MoltBot Ninja API shapes) ──────
+
+/** Identity of the agent currently being deployed; set after provision. */
+export interface ProvisionContext {
+  requestId: string;
+  deploymentId: string;
+  agentId: string;
+}
+
+/** Summary of a successful Wix site introspection. Shown in the Configure
+ *  banner and reused to install the Wix app during voice setup. */
+export interface IntrospectSummary {
+  businessName: string;
+  serviceCount: number;
+  staffCount: number;
+  canonicalUrl: string;
+}
+
 export interface Deployment {
   id: string;
   status: string;
